@@ -1,6 +1,6 @@
 ## Synopsis
 
-**FluTAS (Fluid Transport Accelerated Solver)** is a modular, multiphysics code for multiphase fluid dynamics simulations. The code is written following a "functional programming" approach and aims to accommodate various independent modules. One of the main purposes of the project is to provide an efficient framework able to run both on many-CPUs (MPI) and many-GPUs (MPI+OpenACC+CUDA-Fortran). The code has been tested on several HPC clusters (mainly Tier-0, both on CPUs and GPUs).
+**FluTAS (Fluid Transport Accelerated Solver)** is a modular, multiphysics code for multiphase fluid dynamics simulations. The code is written in a modular way, to easily accomodate different physics into the system. One of the main purposes of the project is to provide an efficient framework able to run both on many-CPUs (MPI) and many-GPUs (MPI+OpenACC+CUDA Fortran). The code has been tested on several large-scale HPC clusters.
 
 This effort initiated within the research group of Prof. Luca Brandt at KTH. The code structure and the Poisson solver are based on **CaNS** (https://github.com/p-costa/CaNS), and have been adapted to include the different modules developed by the various researchers and students at KTH Engineering Mechanics.
 
@@ -68,4 +68,4 @@ We appreciate any feedback to improve the code. Also, feel free to send case fil
 Please read the [`ACKNOWLEDGEMENTS.md`](./ACKNOWLEDGEMENTS.md) and [`LICENSE`](./LICENSE) files.
 
 ## Collaborate on this project
-If you are interested in contributing to this effort, please get in contact with [Luca Brandt](mailto:luca@mech.kth.se)
+If you are interested in contributing to this effort, please get in contact with [Luca Brandt](mailto:luca@mech.kth.se).

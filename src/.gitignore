@@ -1,0 +1,14 @@
+*.o
+*.mod
+*.out
+*.bin
+*.MOD
+*.log
+*dSYM
+*.xdmf
+*.xmf
+flutas
+run/
+data/*.log
+data/*.out
+data/*.xdmf

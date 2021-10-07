@@ -1,0 +1,3 @@
+This case helps to validate the code with respect to single phase, buoyancy driven flows, using the Boussinesq approximation. The setup is similar to the case with Rayleigh number 10^6 in:
+"Accurate solutions to the square thermally driven cavity at high Rayleigh number"
+P. Le Quere, Computers and Fluids Vol.20, No. 1, pp 29-41, 1991.

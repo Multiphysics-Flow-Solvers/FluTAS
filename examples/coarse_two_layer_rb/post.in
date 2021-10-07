@@ -1,0 +1,6 @@
+T				! doTime
+2				! avg_dir
+100				! time_deltai
+F				! doFavre
+T				! doWall
+100				! wall_deltai

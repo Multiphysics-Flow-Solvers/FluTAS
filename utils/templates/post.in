@@ -1,0 +1,20 @@
+T                               !doSpectra
+20000                           !spectra_deltai
+T                               ! doFlux
+50                              ! nflux
+20000                           ! flux_deltai
+T                               ! doHist
+1000                            ! nbin
+20000                           ! hist_deltai
+T                               ! doBalance
+10                              ! balance_deltai
+T                               ! doSF
+50 2 8 5000                     ! nl_sf, dl_sf, nmom_sf, sf_deltai
+T                               ! doRR
+20000                           ! RR_deltai
+T				! doTagging
+5000				! tagging_deltai
+T				! doTime
+10				! time_deltai
+T				! doWall
+5000				! wall_deltai

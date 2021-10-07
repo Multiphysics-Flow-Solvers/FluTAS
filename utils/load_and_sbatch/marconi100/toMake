@@ -1,0 +1,6 @@
+module purge
+module load autoload profile/global
+module load  fftw/3.3.8--spectrum_mpi--10.3.1--binary
+module load hpc-sdk/2020--binary
+
+make -f Makefile.mc -j4

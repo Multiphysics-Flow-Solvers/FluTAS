@@ -1,0 +1,6 @@
+abc          ! turbType 
+1.0	     ! u0_t
+0.1	     ! f0_t ! should be 1.0*visc*(2.0*pi/l)**2 and l = lx=ly=lz
+1	     ! k0_t ! frequency of the forcing, i.e.: 1, 2, 3, ...
+1.0 1.0 1.0  ! A, B and C constants of Arnold-Beltrami-Childress flow
+F            ! add disturbance to the initial condition to trigger transition

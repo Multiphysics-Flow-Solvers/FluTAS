@@ -1,0 +1,2 @@
+ srun --nodes=1 --ntasks-per-node=32 --time=08:00:00 --partition m100_usr_prod --gres=gpu:4 --cpus-per-task=4 --pty /bin/bash
+

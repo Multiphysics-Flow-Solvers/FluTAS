@@ -1,0 +1,57 @@
+if(mod(istep,iout0d).eq.0) then
+    !
+    ! compute the bubble/droplet trajectory and velocity
+    !
+    xd = 0.0d0
+    yd = 0.0d0
+    zd = 0.0d0
+    ut = 0.0d0
+    vt = 0.0d0
+    wt = 0.0d0
+    !
+    do k=1,n(3)
+      do j=1,n(2)
+        do i=1,n(1)
+          !
+          if(psi(i,j,k).gt.1.0e-8) then
+            !
+            !zcd = (k              -0.5d0)*dl(3) !- pos(3)
+            !ycd = (j+coord(2)*n(2)-0.5d0)*dl(2) !- pos(2)
+            !xcd = (i+coord(1)*n(1)-0.5d0)*dl(1) !- pos(1)
+            zcd = (k+ijk_start(3)-0.5d0)*dl(3) !- pos(3)
+            ycd = (j+ijk_start(2)-0.5d0)*dl(2) !- pos(2)
+            xcd = (i+ijk_start(1)-0.5d0)*dl(1) !- pos(1)
+            !
+            xd = xd + dl(1)*dl(2)*dl(3)*xcd*(psi(i,j,k))
+            yd = yd + dl(1)*dl(2)*dl(3)*ycd*(psi(i,j,k))
+            zd = zd + dl(1)*dl(2)*dl(3)*zcd*(psi(i,j,k))
+            ut = ut + dl(1)*dl(2)*dl(3)*(0.5d0*(u(i,j,k)+u(i-1,j,k)))*(psi(i,j,k)) ! along x
+            vt = vt + dl(1)*dl(2)*dl(3)*(0.5d0*(v(i,j,k)+v(i,j-1,k)))*(psi(i,j,k)) ! along y
+            wt = wt + dl(1)*dl(2)*dl(3)*(0.5d0*(w(i,j,k)+w(i,j,k-1)))*(psi(i,j,k)) ! along z
+            !
+          endif
+          !
+        enddo
+      enddo
+    enddo
+    vol = sum(psi(1:n(1),1:n(2),1:n(3)))*dl(1)*dl(2)*dl(3) ! volume of the droplet
+    call mpi_allreduce(MPI_IN_PLACE,xd ,1,mpi_real8,mpi_sum,comm_cart,ierr)
+    call mpi_allreduce(MPI_IN_PLACE,yd ,1,mpi_real8,mpi_sum,comm_cart,ierr)
+    call mpi_allreduce(MPI_IN_PLACE,zd ,1,mpi_real8,mpi_sum,comm_cart,ierr)
+    call mpi_allreduce(MPI_IN_PLACE,vol,1,mpi_real8,mpi_sum,comm_cart,ierr)
+    call mpi_allreduce(MPI_IN_PLACE,ut ,1,mpi_real8,mpi_sum,comm_cart,ierr)
+    call mpi_allreduce(MPI_IN_PLACE,vt ,1,mpi_real8,mpi_sum,comm_cart,ierr)
+    call mpi_allreduce(MPI_IN_PLACE,wt ,1,mpi_real8,mpi_sum,comm_cart,ierr)
+    xd = xd/vol
+    yd = yd/vol
+    zd = zd/vol 
+    ut = ut/vol
+    vt = vt/vol
+    wt = wt/vol
+    if(myid.eq.0) then
+      !call out0d('data/pos_vt.out',7,(/time/(lref/uref),xd/lx,yd/ly,zd/lz,ut/uref,vt/uref,wt/uref/))
+      !call out0d('data/pos_vt.out',7,(/time/(lref/uref),xd/lref,yd/lref,zd/lref,ut/uref,vt/uref,wt/uref/))
+      call out0d('data/pos_vt.out',7,(/time,xd,yd,zd,ut,vt,wt/))
+    endif
+    !
+  endif

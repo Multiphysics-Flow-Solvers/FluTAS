@@ -1,0 +1,10 @@
+1. 1. 0.1 0.1	   ! rho1, rho2, mu1,mu2
+uni		   ! inivof
+1		   ! nbub ! dummy value: we put 1 to avoid problems in compilation
+0.5 0.5 0.5 1.	   ! xc, yc, zc, r
+P P P P N N    	   ! cbcvof
+0. 0. 0. 0. 0. 0.  ! bcvof
+0. 0. 0.    	   ! gacc(1), gacc(2), gacc(3)
+.0		   ! sigma
+0. 0. 0. 	   ! dpdl(1), dpdl(2), dpdl(3)
+T  100000          ! late_init,i_late_init

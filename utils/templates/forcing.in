@@ -1,0 +1,6 @@
+abc                             ! turbType
+0.5                             ! u0_t
+1.0                             ! f0_t
+1.0                             ! k0_t
+1.0 1.0 1.0                     ! ABC coeffs
+

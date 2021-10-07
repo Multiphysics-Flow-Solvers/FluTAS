@@ -1,0 +1,36 @@
+# Compiler definitions
+#
+# NVFORTRAN (cpu/gpu version)
+#
+CPP_FLAGS := -cpp 
+CC        := nvc++
+FC        := mpif90 
+OPT       := -Minfo=accel -fast
+DBG       := #-Minform=inform -Mchkstk -g -O0 -traceback -Mbounds
+PRE       := #-r8
+
+# Take all the compiler flags together
+FFLAGS  := $(OPT) $(DBG) $(PRE)
+DFLAGS  := -D_TIMING -D_EPA2A -D_DECOMP_X #-D_TWOD
+DFLAGS  += #-D_OVERWRITE -D_EVEN # FFLAGS_2DECOMP
+LDFLAGS :=
+
+# Architecture switches
+#
+# NOTE: GPU compilation is enabled with FFLAGS and DFLAGS (see below)
+#
+USE_NVTX = 0
+
+# Required for FFTW
+FFTW_HOME := /data/nicolos/libraries/fftw-3.3.9
+LDFLAGS   += -L${FFTW_HOME}/lib -lfftw3
+
+FFLAGS    += -cuda -acc -gpu=cc70,cuda11.0 -cudalib=cufft,curand 
+DFLAGS    += -D_EPHC -D_GPU_MPI
+
+# Required for INIT_MONTECARLO
+#GSL_LIB   += -L~/lib -lgsl -lgslcblas -lm -lstdc++
+#GSL_INC   += -I~/include 
+
+# Required for NVTX
+NVTX_LIB   += -lnvToolsExt

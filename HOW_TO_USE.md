@@ -10,9 +10,9 @@ In the folder `src/targets/` several templates for architecture-depending enviro
 ### Application selection 
 Different applications can be chosen to better reproduce the physical problem under study. The available applications can be found in `src/apps/`, where each one presents a `main*.f90` and a `app.*` file containing the preprocessor flags required to successfully compile and run the code.
 Currently, the code supports the following applications:
-	* `basic`: single phase, isothermal flow;
-	* `two\_phase\_inc\_isot`: two-phase, incompressible and isothermal flow;
-	* `two\_phase\_ht`: two-phase, incompressible flow with heat transfer.
+ * `basic`: single phase, isothermal flow;
+ * `two_phase_inc_isot`: two-phase, incompressible and isothermal flow;
+ * `two_phase_ht`: two-phase, incompressible flow with heat transfer.
 
 ### Pre-processor flags
 While several `main.f90` can be produced, one `Makefile` is generally used for compilation. It is advisable to duplicate the `Makefile` within each folder corresponding to each configuration, to avoid inconsistent compilation.

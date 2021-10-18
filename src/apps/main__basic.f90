@@ -485,6 +485,7 @@ program flutas
   !
   call bounduvw(cbcvel,n,bcvel,nh_d,nh_u,halo_u,is_outflow,dl,dzc,dzf,u,v,w)
   call boundp(cbcpre,n,bcpre,nh_d,nh_p,halo_p,dl,dzc,dzf,p)
+  call boundp(cbcvof,n,bcvof,nh_d,nh_v,halo_v,dl,dzc,dzf,psi)
   !
   ! for the first time-step and the restarting we use a 0th order extrapolation 
   ! in time-splitting of the pressure equation

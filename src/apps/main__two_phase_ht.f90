@@ -616,6 +616,7 @@ program flutas
   !
   call bounduvw(cbcvel,n,bcvel,nh_d,nh_u,halo_u,is_outflow,dl,dzc,dzf,u,v,w)
   call boundp(cbcpre,n,bcpre,nh_d,nh_p,halo_p,dl,dzc,dzf,p)
+  call boundp(cbcvof,n,bcvof,nh_d,nh_v,halo_v,dl,dzc,dzf,psi)
   call boundp(cbctmp,n,bctmp,nh_d,nh_t,halo_t,dl,dzc,dzf,tmp)
   !
   ! for the first time-step and the restarting we use a 0th order extrapolation 

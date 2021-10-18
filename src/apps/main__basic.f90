@@ -430,7 +430,7 @@ program flutas
       call nvtxEndRange
 #endif
     else
-      psi(1:n(1),1:n(2),1:n(3)) = 1._rp ! dummy value
+      psi(1:n(1),1:n(2),1:n(3)) = 0._rp 
       call boundp(cbcvof,n,bcvof,nh_d,nh_v,halo_v,dl,dzc,dzf,psi)
     endif
     call initflow(inivel,n(1),n(2),n(3),dims,nh_d,nh_u,nh_p,zc/lz,dzc/lz,dzf/lz,1._rp,u,v,w,p)

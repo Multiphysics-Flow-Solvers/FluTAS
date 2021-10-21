@@ -23,7 +23,7 @@ real(8), parameter :: dt = 1.0d0
 !
 ! note: --> fldstart = the first time-step you want to visualize;
 !       --> fldend   = the last time-step you want to visualize;
-!       --> nskip    = the frequencty at which you want to visualize the fields.
+!       --> nskip    = the frequency at which you want to visualize the fields.
 !
 integer, parameter :: fldstart = 0     , &
                       fldend   = 100000, &

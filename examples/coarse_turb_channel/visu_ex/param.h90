@@ -4,7 +4,7 @@ character (len=3), parameter   :: casename = 'lst'
 character (len=3), parameter , dimension(nscal) :: scalname = (/'vex','vey','vez', &
                                                                 'pre'/)
 !
-! note: select nx,ny,nz and lx,ly,lz accordingly to the values in dns.in
+! note: select nx,ny,nz and lx,ly,lz according to the values in your dns.in
 !
 integer, parameter :: nx = 256, &
                       ny = 128, &

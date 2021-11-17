@@ -5,7 +5,7 @@
 F                                    ! constant_dt
 5.522887757789995e-05                ! visc
 zer                                  ! inivel
-F                                    ! is_wallturb
+0                                    ! is_wallturb
 30000 10. 0.1                        ! nstep,time_max,tw_max
 F T F                                ! stop_type(1:3)
 F                                    ! restart

@@ -179,7 +179,7 @@ module mod_gradls
     !$OMP PRIVATE(uxc,uyc,uzc,a) &
     !$OMP PRIVATE(fm2,fm1,f0,fp1,fp2) &
     !$OMP PRIVATE(beta1,beta2,beta3,we1,we2,we3,eps) &
-    !$OMP PRIVATE(c11,c21,c31,c12._rpc22,c32,c13._rpc23,c33) &
+    !$OMP PRIVATE(c11,c21,c31,c12,c22,c32,c13,c23,c33) &
     !$OMP PRIVATE(dfdlh1,dfdlh2,dfdlh3,dphidx,dphidy,dphidz) &
     !$OMP SHARED(nx,ny,nz,dxi,dyi,dzi,ux,uy,uz,phi,dphidt)
 #endif

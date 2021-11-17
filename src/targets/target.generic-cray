@@ -5,8 +5,11 @@
 CPP_FLAGS := -cpp 
 CC        := g++
 FC        := ftn  
-OPT       := -O3 #-hfp3
-DBG       := #?
+ifeq ($(DO_DBG),1)
+  DBG       := #?
+else
+  OPT       := -O3 #-hfp3
+endif
 PRE       := #-r8
 
 # Take all the compiler flags together

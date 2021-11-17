@@ -196,7 +196,7 @@ module mod_rk
     enddo
 #if defined(_OPENACC)
     !$acc end kernels 
-    !!!!!!!@cuf istat=cudaDeviceSynchronize()
+    !@cuf istat=cudaDeviceSynchronize()
 #else
     !$OMP END PARALLEL DO
 #endif
@@ -217,6 +217,7 @@ module mod_rk
         enddo
       enddo
       !$acc end kernels
+      !@cuf istat=cudaDeviceSynchronize()
       if(present(f)) then
         f(1) = bulk_velx-meanvel
       endif
@@ -232,6 +233,7 @@ module mod_rk
         enddo
       enddo
       !$acc end kernels
+      !@cuf istat=cudaDeviceSynchronize()
       if(present(f)) then
         f(2) = bulk_vely-meanvel
       endif
@@ -247,6 +249,7 @@ module mod_rk
         enddo
       enddo
       !$acc end kernels
+      !@cuf istat=cudaDeviceSynchronize()
       if(present(f)) then
         f(3) = bulk_velz-meanvel
       endif

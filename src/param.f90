@@ -31,7 +31,7 @@ module mod_param
   logical                              :: constant_dt
   real(rp)                             :: visc
   character(len=100)                   :: inivel
-  logical                              :: is_wallturb
+  integer                              :: is_wallturb
   integer                              :: nstep
   real(rp)                             :: time_max,tw_max
   logical, dimension(3)                :: stop_type

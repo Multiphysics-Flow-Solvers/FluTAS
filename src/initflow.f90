@@ -7,6 +7,8 @@ module mod_initflow
   use decomp_2d
   use mod_common_mpi, only: ierr,myid,ijk_start
   use mod_param     , only: pi,dx,dy,dz,ng, &
+                            is_forced, bulk_velx,bulk_vely,bulk_velz,&
+                            dpdl, small, &
 #if defined(_TURB_FORCING)
                             u0_t, k0_t, abc, add_noise_abc, &
 #endif
@@ -31,7 +33,7 @@ module mod_initflow
   !
   contains
   !
-  subroutine initflow(inivel,nx,ny,nz,dims,nh_d,nh_u,nh_p,zclzi,dzclzi,dzflzi,norm,u,v,w,p)
+  subroutine initflow(inivel,nx,ny,nz,dims,nh_d,nh_u,nh_p,zclzi,dzclzi,dzflzi,u,v,w,p)
     !
     ! computes initial conditions for the velocity and pressure field
     !
@@ -42,7 +44,6 @@ module mod_initflow
     integer         , intent(in ), dimension(3)                       :: dims
     integer         , intent(in )                                     :: nh_d,nh_u,nh_p
     real(rp)        , intent(in ), dimension(1-nh_d:)                 :: zclzi,dzclzi,dzflzi
-    real(rp)        , intent(in )                                     :: norm
     real(rp)        , intent(out), dimension(1-nh_u:,1-nh_u:,1-nh_u:) :: u,v,w
     real(rp)        , intent(out), dimension(1-nh_p:,1-nh_p:,1-nh_p:) :: p
     !
@@ -54,6 +55,7 @@ module mod_initflow
     real(rp) :: xc,yc,zc,xf,yf,zf
     integer  :: i,j,k
     logical  :: is_noise,is_mean
+    real(rp) :: norm = 1._rp
 #if defined(_OPENACC)
     integer :: istat
 #endif
@@ -64,6 +66,18 @@ module mod_initflow
     is_noise = .false.
     is_mean  = .false.
     q = 0.5_rp
+    if (is_forced(1))               then
+      norm = bulk_velx
+    elseif (is_forced(2))           then
+      norm = bulk_vely
+    elseif (is_forced(3))           then 
+      norm = bulk_velz
+    elseif (abs(sum(dpdl)).ge.small) then
+      norm = ((-sum(dpdl)*lz/2._rp/rho2)**0.5*lz/2._rp/mu2/0.09)**(1._rp/0.88)* & !Re_tau
+              mu2/lz
+    else 
+      norm = 1._rp
+    endif
     !
     select case(inivel)
     case('cou')
@@ -182,39 +196,68 @@ module mod_initflow
     endif
     !
     if(is_mean) then
-      call set_mean(nx,ny,nz,nh_d,dims,dzclzi,1._rp,u(1:nx,1:ny,1:nz))
+      call set_mean(nx,ny,nz,nh_d,dims,dzclzi,norm,u(1:nx,1:ny,1:nz))
     endif
-    if(is_wallturb) then
-      !
-      ! initialize a streamwise vortex pair for a fast transition
-      ! to turbulence in a pressure-driven channel:
-      !        psi(x,y,z)  = f(z)*g(x,y), with
-      !        f(z)        = (1-z**2)**2, and
-      !        g(x,y)      = y*exp[-(16x**2-4y**2)]
-      ! (x,y,z) --> (streamwise, spanwise, wall-normal) directions
-      !
-      ! see Henningson and Kim, JFM 1991
-      !
-      !!$acc kernels
-      do k=1,nz
-        do j=1,ny
-          do i=1,nx
-            !
-            zc = 2._rp*zclzi(k) - 1._rp ! z rescaled to be between -1 and +1
-            zf = 2._rp*(zclzi(k) + 0.5_rp*dzflzi(k)) - 1._rp
-            yc = ((ijk_start(2)+j-0.5_rp)*dy-0.5_rp*ly)*2._rp/lz
-            yf = ((ijk_start(2)+j-0.0_rp)*dy-0.5_rp*ly)*2._rp/lz
-            xc = ((ijk_start(1)+i-0.5_rp)*dx-0.5_rp*lx)*2._rp/lz
-            xf = ((ijk_start(1)+i-0.0_rp)*dx-0.5_rp*lx)*2._rp/lz
-            !
-            u(i,j,k) = u1d(k)
-            v(i,j,k) =  1._rp * fz(zc)*dgxy(yf,xc)*norm*1.5_rp
-            w(i,j,k) = -1._rp * gxy(yc,xc)*dfz(zf)*norm*1.5_rp
-            p(i,j,k) = 0._rp
-            !
+    if(is_wallturb.ne.0) then
+      if(is_wallturb.eq.1) then
+        !
+        ! initialize a streamwise vortex pair for a fast transition
+        ! to turbulence in a pressure-driven channel:
+        !        psi(x,y,z)  = f(z)*g(x,y), with
+        !        f(z)        = (1-z**2)**2, and
+        !        g(x,y)      = y*exp[-(16x**2-4y**2)]
+        ! (x,y,z) --> (streamwise, spanwise, wall-normal) directions
+        !
+        ! see Henningson and Kim, JFM 1991
+        !
+        !!$acc kernels
+        do k=1,nz
+          do j=1,ny
+            do i=1,nx
+              !
+              zc = 2._rp*zclzi(k) - 1._rp ! z rescaled to be between -1 and +1
+              zf = 2._rp*(zclzi(k) + 0.5_rp*dzflzi(k)) - 1._rp
+              yc = ((ijk_start(2)+j-0.5_rp)*dy-0.5_rp*ly)*2._rp/lz
+              yf = ((ijk_start(2)+j-0.0_rp)*dy-0.5_rp*ly)*2._rp/lz
+              xc = ((ijk_start(1)+i-0.5_rp)*dx-0.5_rp*lx)*2._rp/lz
+              xf = ((ijk_start(1)+i-0.0_rp)*dx-0.5_rp*lx)*2._rp/lz
+              !
+              u(i,j,k) = u1d(k)
+              v(i,j,k) =  1._rp * fz(zc)*dgxy(yf,xc)*norm*1.5_rp
+              w(i,j,k) = -1._rp * gxy(yc,xc)*dfz(zf)*norm*1.5_rp
+              p(i,j,k) = 0._rp
+              !
+            enddo
           enddo
         enddo
-      enddo
+      elseif(is_wallturb.eq.2) then
+        !
+        ! Initialize turbulence using Taylor-Green vortices
+        !
+        do k=1,nz
+          zc = (zclzi(k)                 )*2._rp*pi
+          zf = (zclzi(k)+0.5_rp*dzclzi(k))*2._rp*pi
+          do j=1,ny
+            yc = (j+ijk_start(2)-0.5_rp)*dy/ly*2._rp*pi
+            yf = (j+ijk_start(2)-0.0_rp)*dy/ly*2._rp*pi
+            do i=1,nx
+              xc = (i+ijk_start(1)-0.5_rp)*dx/lx*2._rp*pi
+              xf = (i+ijk_start(1)-0.0_rp)*dx/lx*2._rp*pi
+              !u(i,j,k) = u1d(k)
+              v(i,j,k) =  sin(xc)*cos(yf)*cos(zc)*norm
+              w(i,j,k) = -cos(xc)*sin(yc)*cos(zf)*norm
+              p(i,j,k) = 0._rp!(cos(2.*xc)+cos(2.*yc))*(cos(2.*zc)+2.)/16.
+            enddo
+          enddo
+        enddo
+      else
+       if(myid.eq.0) print*, 'Wrong setting specified for is_wallturb. &
+                              Please set 1 for Henningson and Kim vortices, &
+                              2 for Taylor-Green vortices or 0 to disable it.'
+       if(myid.eq.0) print*, 'Aborting...'
+       call MPI_FINALIZE(ierr)
+       call exit()
+      endif
       !!$acc end kernels
       !@cuf istat=cudaDeviceSynchronize()
     endif
@@ -555,7 +598,7 @@ module mod_initflow
     !
     do k=1,n
       z    = zc(k)!1._rp*((k-1)+q)/(1._rp*n)
-      p(k) = 6._rp*z*(1._rp-z)/norm
+      p(k) = 6._rp*z*(1._rp-z)*norm
     enddo
     !
     return

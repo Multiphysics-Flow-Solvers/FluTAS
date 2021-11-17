@@ -1,12 +1,12 @@
-64 64 64                                               ! itot, jtot, ktot
+16 16 16                                               ! itot, jtot, ktot
 6.283185307179586 6.283185307179586 6.283185307179586  ! lx, ly, lz
 0.                                                     ! gr
 0.50 1.0e-3                                            ! cfl, dt_input
 F                                                      ! constant_dt
 0.1                                                    ! visc
 abc                                                    ! inivel
-F                                                      ! is_wallturb
-1000 100. 0.1                                          ! nstep,time_max,tw_max
+0                                                      ! is_wallturb
+30000 100. 0.1                                         ! nstep,time_max,tw_max
 T F F                                                  ! stop_type(1:3)
 F                                                      ! restart
 10 10 20 500 100 2000                                  ! icheck, iout0d, iout1d, iout2d, iout3d, isave

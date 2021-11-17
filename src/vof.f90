@@ -1335,6 +1335,7 @@ module mod_vof
     real(rp) :: grid_vol_ratio
     integer , dimension(2):: nx_b, ny_b, nz_b
     integer :: n1,n2,n3
+    real(rp):: sign_v
     !
     nbox = 100
     dl(:) = dli(:)**(-1)
@@ -1370,6 +1371,7 @@ module mod_vof
         call bub_lim(nx_b,xc(i_b),r(i_b),dl(1),n(1),ijk_start(1))
         call bub_lim(ny_b,yc(i_b),r(i_b),dl(2),n(2),ijk_start(2))
         call bub_lim(nz_b,zc(i_b),r(i_b),dl(3),n(3),ijk_start(3))
+        !$acc kernels
         do k=nz_b(1),nz_b(2)
           z = (k+ijk_start(3)-0.5_rp)*dl(3)
           do j=ny_b(1),ny_b(2)
@@ -1435,9 +1437,12 @@ module mod_vof
             enddo
           enddo
         enddo
+        !$acc end kernels
+        !$istat = cudaDeviceSynchronize()
       enddo
       !
     case('uni')
+      !$acc kernels
       do k=1,n(3)
         do j=1,n(2)
           do i=1,n(1)
@@ -1445,8 +1450,11 @@ module mod_vof
            enddo
          enddo
        enddo
+       !$acc end kernels
+       !$istat = cudaDeviceSynchronize()
        !
     case('zer')
+      !$acc kernels
       do k=1,n(3)
         do j=1,n(2)
           do i=1,n(1)
@@ -1454,6 +1462,8 @@ module mod_vof
           enddo
         enddo
       enddo
+      !$acc end kernels
+      !$istat = cudaDeviceSynchronize()
       !
     case('flm')
       eps    = dl(3)
@@ -1589,6 +1599,10 @@ module mod_vof
       !$acc end kernels
       !$istat = cudaDeviceSynchronize()
     case('tax')
+      !
+      ! note: sign_v = 1 (vof=1 top, vof=0 bottom), sign_v = -1 (vof=0 top, vof=1 bottom)
+      !
+      sign_v    = +1._rp
       xfilm_bot = lx/2.0_rp
       !$acc kernels
       do k=1,n(3)
@@ -1598,14 +1612,14 @@ module mod_vof
             x  = (ii-0.5_rp)*dl(1)
             !
             if(     x.gt.(xfilm_bot+0.05_rp*lx))  then
-              vof(i,j,k) = 1.0_rp
+              vof(i,j,k) = (1._rp+1._rp*sign_v)/2._rp
             elseif( x.lt.(xfilm_bot-0.05_rp*lx))  then
-              vof(i,j,k) = 0.0_rp
+              vof(i,j,k) = (1._rp-1._rp*sign_v)/2._rp
             else
-              csi1 = (b_th/dl(1))*(x-dl(1)*0.5_rp-xfilm_bot)
-              csi2 = (b_th/dl(1))*(x+dl(1)*0.5_rp-xfilm_bot)
-              vof(i,j,k) = ((0.5_rp*csi2+0.5_rp*log(cosh(csi2))) - &
-                            (0.5_rp*csi1+0.5_rp*log(cosh(csi1))))
+              csi1 = (b_th/dl(1))*(sign_v*(x-dl(1)*0.5_rp-xfilm_bot))
+              csi2 = (b_th/dl(1))*(sign_v*(x+dl(1)*0.5_rp-xfilm_bot))
+              vof(i,j,k) = 1._rp*sign_v*((0.5_rp*csi2+0.5_rp*log(cosh(csi2))) - &
+                                         (0.5_rp*csi1+0.5_rp*log(cosh(csi1))))
               vof(i,j,k) = vof(i,j,k)*dl(1)/(dl(1)*b_th)
             endif
             !
@@ -1617,6 +1631,10 @@ module mod_vof
       !$acc end kernels
       !$istat = cudaDeviceSynchronize()
     case('tay')
+      !
+      ! note: sign_v = 1 (vof=1 top, vof=0 bottom), sign_v = -1 (vof=0 top, vof=1 bottom)
+      !
+      sign_v    = +1._rp
       yfilm_bot = ly/2.0_rp
       !$acc kernels
       do k=1,n(3)
@@ -1626,14 +1644,14 @@ module mod_vof
             y  = (jj-0.5_rp)*dl(2)
             !
             if(    y.gt.(yfilm_bot+0.05_rp*ly))  then
-              vof(i,j,k) = 1.0_rp
+              vof(i,j,k) = (1._rp+1._rp*sign_v)/2._rp
             elseif(y.lt.(yfilm_bot-0.05_rp*ly))  then
-              vof(i,j,k) = 0.0_rp
+              vof(i,j,k) = (1._rp-1._rp*sign_v)/2._rp
             else
-              csi1 = (b_th/dl(2))*(y-dl(2)*0.5_rp-yfilm_bot)
-              csi2 = (b_th/dl(2))*(y+dl(2)*0.5_rp-yfilm_bot)
-              vof(i,j,k) = ((0.5_rp*csi2+0.5_rp*log(cosh(csi2))) - &
-                            (0.5_rp*csi1+0.5_rp*log(cosh(csi1))))
+              csi1 = (b_th/dl(2))*(sign_v*(y-dl(2)*0.5_rp-yfilm_bot))
+              csi2 = (b_th/dl(2))*(sign_v*(y+dl(2)*0.5_rp-yfilm_bot))
+              vof(i,j,k) = 1._rp*sign_v*((0.5_rp*csi2+0.5_rp*log(cosh(csi2))) - &
+                                         (0.5_rp*csi1+0.5_rp*log(cosh(csi1))))
               vof(i,j,k) = vof(i,j,k)*dl(2)/(dl(2)*b_th)
             endif
             !
@@ -1645,27 +1663,31 @@ module mod_vof
       !$acc end kernels
       !$istat = cudaDeviceSynchronize()
     case('taz')
+      !
+      ! note: sign_v = 1 (vof=1 top, vof=0 bottom), sign_v = -1 (vof=0 top, vof=1 bottom)
+      !
+      sign_v    = +1._rp
       zfilm_bot = lz/2.0_rp
       !$acc kernels
       do k=1,n(3)
         do j=1,n(2)
           do i=1,n(1)
             kk = ijk_start(3) + k
-            z  = (kk-0.5_rp)*dl(3)
+            z  = (kk-0.5)*dl(3)
             !
             if(    z.gt.(zfilm_bot+0.05_rp*lz))  then
-              vof(i,j,k) = 1.0_rp
+              vof(i,j,k) = (1._rp+1._rp*sign_v)/2._rp
             elseif(z.lt.(zfilm_bot-0.05_rp*lz))  then
-              vof(i,j,k) = 0.0_rp
+              vof(i,j,k) = (1._rp-1._rp*sign_v)/2._rp
             else
-              csi1 = (b_th/dl(3))*(z-dl(3)*0.5_rp-zfilm_bot)
-              csi2 = (b_th/dl(3))*(z+dl(3)*0.5_rp-zfilm_bot)
-              vof(i,j,k) = ((0.5_rp*csi2+0.5_rp*log(cosh(csi2))) - &
-                            (0.5_rp*csi1+0.5_rp*log(cosh(csi1))))
+              csi1 = (b_th/dl(3))*(sign_v*(z-dl(3)*0.5-zfilm_bot))*1._rp
+              csi2 = (b_th/dl(3))*(sign_v*(z+dl(3)*0.5-zfilm_bot))*1._rp
+              vof(i,j,k) = 1._rp*sign_v*((0.5_rp*csi2+0.5_rp*log(cosh(csi2))) - &
+                                         (0.5_rp*csi1+0.5_rp*log(cosh(csi1))))
               vof(i,j,k) = vof(i,j,k)*dl(3)/(dl(3)*b_th)
             endif
             !
-            vof(i,j,k) = min(max(0.0_rp,vof(i,j,k)),1.0_rp) ! also in Matlab, noticed overshoot of 1.0+1e-12
+            vof(i,j,k) = min(max(0._rp,vof(i,j,k)),1._rp) ! also in Matlab, noticed overshoot of 1.0+1e-12
             !
           enddo
         enddo

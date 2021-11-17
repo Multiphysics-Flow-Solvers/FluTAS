@@ -39,7 +39,7 @@ program flutas
   use mod_initsolver, only: initsolver
   use mod_load      , only: load, load_scalar
   use mod_rk        , only: rk
-  use mod_output    , only: out0d,out1d,out1d_2,out2d,out3d
+  use mod_output    , only: out0d,out1d,out1d_2,out2d,out3d,write_visu_2d,write_visu_3d
 #if defined(_TURB_FORCING)
   use mod_output    , only: budget
 #endif
@@ -57,7 +57,8 @@ program flutas
                             rho1,rho2,rho0,mu1,mu2,cbcvof,bcvof,late_init,i_late_init, &
                             rho0, &
                             n,ng,l,dl,dli, &
-                            read_input
+                            read_input, &
+                            dpdl
   !
   use mod_sanity    , only: test_sanity
 #if defined(_OPENACC)
@@ -130,7 +131,7 @@ program flutas
   logical  :: is_first_vel,is_data
   !
   real(rp) :: meanvel,meanvelu,meanvelv,meanvelw
-  real(rp), dimension(3) :: dpdl
+  real(rp), dimension(3) :: dpdl_c
   real(rp), dimension(10) :: var
   ! 
   character(len=9) :: fldnum
@@ -363,6 +364,10 @@ program flutas
       write(99,'(5E15.7)') 1._rp*kk,zf_g(kk),zc_g(kk),dzf_g(kk),dzc_g(kk)
     enddo
     close(99)
+    open(99,file=trim(datadir)//'geometry.out')
+      write(99,*) ng(1),ng(2),ng(3)
+      write(99,*) l(1),l(2),l(3)
+    close(99)
   endif
   !$acc kernels
   do k=1-nh_d,ng(3)+nh_d
@@ -433,7 +438,7 @@ program flutas
       psi(1:n(1),1:n(2),1:n(3)) = 0._rp 
       call boundp(cbcvof,n,bcvof,nh_d,nh_v,halo_v,dl,dzc,dzf,psi)
     endif
-    call initflow(inivel,n(1),n(2),n(3),dims,nh_d,nh_u,nh_p,zc/lz,dzc/lz,dzf/lz,1._rp,u,v,w,p)
+    call initflow(inivel,n(1),n(2),n(3),dims,nh_d,nh_u,nh_p,zc/lz,dzc/lz,dzf/lz,u,v,w,p)
     !
     ! set to zeros the rhs of momentum equation 
     ! (only for the first time-step, not for the restarting)
@@ -615,7 +620,8 @@ program flutas
     !
     ! 1. VoF advection and properties update --> vof^(n+1) 
     !
-    if(.not.late_init.and.istep.ge.i_late_init) then ! in case we want first to run without advecting the VoF
+    if((.not.late_init).or.    &                  ! Normal run (initialized at i=0)
+       (late_init.and.istep.ge.i_late_init)) then ! in case we want first to run without advecting the VoF
       !
 #if defined(_USE_NVTX)
       call nvtxStartRange("FullVof")
@@ -637,7 +643,7 @@ program flutas
     ! 2. two-fluid Navier-Stokes --> (u,v,w,p)^(n+1)
     !
     rho0i = 1._rp/rho0
-    if(is_wallturb) dpdl(1:3) = 0._rp
+    dpdl_c(1:3) = 0._rp
     !
 #if defined(_USE_NVTX)
     call nvtxStartRange("rk")
@@ -648,7 +654,7 @@ program flutas
     call nvtxEndRange
 #endif
     call bounduvw(cbcvel,n,bcvel,nh_d,nh_up,halo_up,no_outflow,dl,dzc,dzf,up,vp,wp)
-    if(is_wallturb) dpdl(1:3) = dpdl(1:3) + f(1:3)
+    dpdl_c(1:3) = dpdl_c(1:3) + f(1:3) + dpdl(1:3)*dt
     !
 #if defined(_USE_NVTX)
     call nvtxStartRange("fillps")
@@ -790,14 +796,20 @@ program flutas
       var(6) = vol_p1
       call out0d(trim(datadir)//'vof_info.out',6,var)
       !
-      if(any(is_forced(:))) then ! control strategy: constant flow-rate
+      if(any(is_forced(:)).or.(abs(sum(dpdl_c)).ge.small)) then ! control strategy: constant flow-rate
+        call chkmean(n(1),n(2),n(3),dims,nh_d,nh_up,1._rp/(dzfi*lz),u,meanvelu)
+        call chkmean(n(1),n(2),n(3),dims,nh_d,nh_up,1._rp/(dzfi*lz),v,meanvelv)
+        call chkmean(n(1),n(2),n(3),dims,nh_d,nh_up,1._rp/(dzfi*lz),w,meanvelw)
         var(:)   = 0._rp
         var(1)   = time
         var(2)   = 1._rp*istep
-        var(3:5) = -dpdl(1:3)*dti*rho2
+        var(3:5) = -dpdl_c(1:3)*dti*rho2
         var(6)   = sqrt(maxval(abs(var(3:5)))*lz*0.5_rp)
         var(7)   = rho2*var(6)*0.5_rp*lz/mu2 ! Re_tau
-        call out0d(trim(datadir)//'forcing.out',7,var)
+        var(8)   = meanvelu
+        var(9)   = meanvelv
+        var(10)  = meanvelw
+        call out0d(trim(datadir)//'forcing.out',10,var)
       endif 
       !
     endif

@@ -1,11 +1,8 @@
 # Makefile
-ifndef ARCH
-ARCH := generic
-endif
 
-ifndef APP
-APP := basic
-endif
+ARCH ?= generic
+APP ?= basic
+USE_FAST_KERNELS ?= 0
 
 include targets/target.$(ARCH)
 include apps/app.$(APP)
@@ -23,7 +20,8 @@ POST_PATH = apps/postp.$(APP) -I./postprocessing
 .c.o:
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-OBJS = bound.o \
+OBJS = profiler.o \
+bound.o \
 chkdiv.o \
 chkdt.o \
 common_mpi.o \
@@ -49,16 +47,23 @@ types.o
 ######## TO CUSTOMIZE BASED ON APPLICATION PHYSICS ########
 ###########################################################
 
+
+ifeq ($(USE_FAST_KERNELS),1) 
+	DFLAGS  += -D_FAST_KERNELS_1
+	DFLAGS  += -D_FAST_KERNELS_2
+	DFLAGS  += -D_FAST_KERNELS_3
+	DFLAGS  += -D_FAST_KERNELS_4
+endif
+
 ifeq ($(TURB_FORCING),1) 
 	DFLAGS += -D_TURB_FORCING
 endif
 
-ifeq ($(DO_POSTPROC),1) 
+ifeq ($(DO_POSTPROC),1)
+ifeq ($(HEAT_TRANSFER),1) 
 	OBJS += postprocessing/post.o
-# OBJS += postprocessing/spectra.o
-# OBJS += postprocessing/fftw_spectra.o 
-# OBJS += postprocessing/post.o 
-# OBJS += postprocessing/tagging.o
+endif
+	OBJS += postprocessing/tagging.o
 	DFLAGS += -D_DO_POSTPROC
 endif
 
@@ -92,23 +97,26 @@ endif
 
 ifeq ($(USE_NVTX),1)  
 	DFLAGS += -D_USE_NVTX
-	OBJS += nvtx.o
-  LDFLAGS += $(NVTX_LIB)
+	LDFLAGS += $(NVTX_LIB)
 endif
 
 ###########################################################
 
 TARGET = flutas
 
-all: $(TARGET)
+all: $(TARGET).$(APP)
+	ln -s $(TARGET).$(APP) $(TARGET)
 
 main.o : apps/$(MAIN_SRC) $(OBJS)
 	$(FC) $(FFLAGS) $(DFLAGS) $(CPP_FLAGS) -I$(POST_PATH) -c -o main.o $<
 
-$(TARGET): $(OBJS) main.o
-	$(FC) $(FFLAGS) $(DFLAGS) $(OBJS) $(LDFLAGS) main.o -o $(TARGET)
+$(TARGET).$(APP): $(OBJS) main.o
+	$(FC) $(FFLAGS) $(DFLAGS) $(OBJS) $(LDFLAGS) main.o -o $(TARGET).$(APP)
 
-clean:
-	rm -rf *.o *.mod *dSYM $(TARGET)
+clean-obj:
+	rm -rf *.o *.mod *dSYM
+
+clean: clean-obj
+	rm -rf $(TARGET)*
 
 include make.deps

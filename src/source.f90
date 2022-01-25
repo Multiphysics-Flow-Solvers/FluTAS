@@ -33,10 +33,7 @@ module mod_source
     real(rp) :: kappax,kappay,kappaz
     real(rp) :: rhox,rhoy,rhoz
     integer  :: i,j,k,ip,jp,kp
-#if defined(_OPENACC)
-    integer :: istat
-    attributes(managed) :: kappa, psi, rho, dudt, dvdt, dwdt
-#endif
+    !@cuf attributes(managed) :: kappa, psi, rho, dudt, dvdt, dwdt
     !
     !$acc kernels
     do k=1,nz
@@ -85,25 +82,21 @@ module mod_source
 #if defined(_BOUSSINESQ)
     integer , intent(in   )                                     :: nh_t
     real(rp), intent(in   ), dimension(1-nh_t:,1-nh_t:,1-nh_t:) :: tmp
+    !@cuf attributes(managed) :: tmp
 #endif
     real(rp), intent(inout), dimension(     1:,     1:,     1:) :: dudt,dvdt,dwdt
     !
     real(rp) :: rhox,rhoy,rhoz, gacc1, gacc2, gacc3 
     real(rp) :: termx,termy,termz,tmppx,tmppy,tmppz
     integer  :: i,j,k,ip,jp,kp
-#if defined(_OPENACC)
-    integer :: istat
-    attributes(managed) :: rho, dudt, dvdt, dwdt
-#if defined(_BOUSSINESQ)
-    attributes(managed) :: tmp
-#endif
-#endif
+    !@cuf attributes(managed) :: rho, dudt, dvdt, dwdt
     !
     ! in case it is periodic, subtract mean gravitational force per unit mass
     !
     gacc1 = gacc(1)
     gacc2 = gacc(2)
     gacc3 = gacc(3)
+    !
     !$acc kernels
     do k=1,nz
       do j=1,ny
@@ -152,11 +145,13 @@ module mod_source
     real(rp), intent(out), dimension(1:,1:,1:) :: dudt,dvdt,dwdt
     !
     real(rp) :: rhox,rhoy,rhoz,rhoxi,rhoyi,rhozi
+    real(rp) :: dpdl1, dpdl2, dpdl3
     integer  :: i,j,k,ip,jp,kp
-#if defined(_OPENACC)
-    integer :: istat
-    attributes(managed) :: p, pp, rho, dudt,dvdt, dwdt
-#endif
+    !@cuf attributes(managed) :: p, pp, rho, dudt,dvdt, dwdt
+    !
+    dpdl1 = dpdl(1)
+    dpdl2 = dpdl(2)
+    dpdl3 = dpdl(3)
     !
     !$acc kernels
     do k=1,nz
@@ -176,11 +171,11 @@ module mod_source
           rhoz  = 0.5_rp*(rho(i,j,kp)+rho(i,j,k))
           rhozi = 1.0_rp / rhoz
           !
-          dudt(i,j,k) = ( - ( p(ip,j,k)-p(i,j,k) )*dxi - dpdl(1))*rho0i &
+          dudt(i,j,k) = ( - ( p(ip,j,k)-p(i,j,k) )*dxi - dpdl1)*rho0i &
                           - (rhoxi  - rho0i)*(pp(ip,j,k)-pp(i,j,k))*dxi
-          dvdt(i,j,k) = ( - ( p(i,jp,k)-p(i,j,k) )*dyi - dpdl(2))*rho0i &
+          dvdt(i,j,k) = ( - ( p(i,jp,k)-p(i,j,k) )*dyi - dpdl2)*rho0i &
                           - (rhoyi  - rho0i)*(pp(i,jp,k)-pp(i,j,k))*dyi
-          dwdt(i,j,k) = ( - ( p(i,j,kp)-p(i,j,k) )*dzi - dpdl(3))*rho0i &
+          dwdt(i,j,k) = ( - ( p(i,j,kp)-p(i,j,k) )*dzi - dpdl3)*rho0i &
                           - (rhozi  - rho0i)*(pp(i,j,kp)-pp(i,j,k))*dzi
           !
         enddo
@@ -205,10 +200,7 @@ module mod_source
     real(rp) :: xc,yc,zc,xf,yf
     real(rp) :: abc1,abc2,abc3
     integer  :: i,j,k
-#if defined(_OPENACC)
-    attributes(managed) :: dudt,dvdt,dwdt
-    integer  :: istat
-#endif
+    !@cuf attributes(managed) :: dudt,dvdt,dwdt
     !
     abc1 = abc(1)
     abc2 = abc(2)

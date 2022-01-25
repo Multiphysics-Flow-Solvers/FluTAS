@@ -3,7 +3,7 @@
 0.                                  ! gr
 0.5 1.0e-4                          ! cfl, dt_input
 F                                   ! constant_dt
-0.0001167841                        ! visc
+0.001                               ! visc
 zer                                 ! inivel
 0                                   ! is_wallturb
 1000 100. 0.1                       ! nstep,time_max,tw_max

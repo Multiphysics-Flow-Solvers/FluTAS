@@ -79,13 +79,9 @@ program flutas
 #if defined(_DO_POSTPROC)
   use mod_post      , only: time_avg,wall_avg,compute_vorticity,mixed_variables
 #endif
-#if defined(_OPENACC)
-  use cudafor
-  use mod_common_mpi, only: mydev
-#endif
-#if defined(_USE_NVTX)
-  use nvtx
-#endif
+  use profiler
+!@cuf use mod_common_mpi, only: mydev
+!@cuf use cudafor
   !
   !$ use omp_lib
   !
@@ -118,14 +114,7 @@ program flutas
   real(rp), allocatable, dimension(:)   :: ap,bp,cp
   real(rp) :: normfftp
   ! 
-  type rhs_bound
-#if defined(_OPENACC)
-   real(rp), allocatable, dimension(:,:,:), managed :: x,y,z
-#else
-   real(rp), allocatable, dimension(:,:,:) :: x,y,z
-#endif
-  end type rhs_bound 
-  type(rhs_bound), allocatable :: rhsbp
+  real(rp), allocatable, dimension(:,:,:) :: rhsbp_x, rhsbp_y, rhsbp_z
   !
   real(rp), dimension(3) :: f
   real(rp) :: dt,dti,dtmax,time,dtrk,dtrki,divtot,divmax
@@ -155,16 +144,15 @@ program flutas
   integer :: kk
   logical :: is_done,kill
   real(rp) :: rho0i
-#if defined(_OPENACC)
-  attributes(managed) :: pold, kappa, mu, rho, psi, d_thinc, cur_t, nor
-  attributes(managed) :: u, v, w, p, up, vp, wp, pp 
-  attributes(managed) :: tmp, ka, cpp, dtmpdtrk, dtmpdtrkold
-  integer :: istat
-  integer(kind=cuda_count_kind) :: freeMem, totMem
-  integer(rp) :: totEle
-  attributes(managed) :: dzc, dzf, zc, zf, dzci, dzfi, lambdaxyp, ap, bp, cp, rhsbp
-  attributes(managed) :: dudtrko, dvdtrko, dwdtrko
-#endif
+  !
+  !@cuf integer :: istat
+  !@cuf integer(kind=cuda_count_kind) :: freeMem, totMem
+  !@cuf attributes(managed) :: pold, kappa, mu, rho, psi, d_thinc, cur_t, nor
+  !@cuf attributes(managed) :: u, v, w, p, up, vp, wp, pp 
+  !@cuf attributes(managed) :: tmp, ka, cpp, dtmpdtrk, dtmpdtrkold
+  !@cuf attributes(managed) :: dzc, dzf, dzci, dzfi, zc, zf, lambdaxyp, ap, bp, cp, rhsbp_x, rhsbp_y, rhsbp_z 
+  !@cuf attributes(managed) :: dudtrko, dvdtrko, dwdtrko
+  !
   !if we don't use dropcheck.f90 we can comment the next line  
   !real(rp) :: xd,yd,zd,ut,vt,wt,zcd,ycd,xcd,vol
   real(rp) :: vof_min,vof_max,vol_p1
@@ -201,40 +189,37 @@ program flutas
   real(rp) :: tmp_vol_avg_l,tmp_vol_sqr_l 
   real(rp) :: utmp_vol_avg_g,utmp_vol_sqr_g,vtmp_vol_avg_g,vtmp_vol_sqr_g,wtmp_vol_avg_g,wtmp_vol_sqr_g 
   real(rp) :: utmp_vol_avg_l,utmp_vol_sqr_l,vtmp_vol_avg_l,vtmp_vol_sqr_l,wtmp_vol_avg_l,wtmp_vol_sqr_l 
-#if defined(_OPENACC)
-  attributes(managed) :: vorx,uv,vw,wu,utmp,vtmp,wtmp
-  attributes(managed) :: u_avg_g,v_avg_g,w_avg_g,u_sqr_g,v_sqr_g,w_sqr_g 
-  attributes(managed) :: u_avg_l,v_avg_l,w_avg_l,u_sqr_l,v_sqr_l,w_sqr_l 
-  attributes(managed) :: uv_avg_g,vw_avg_g,wu_avg_g,uv_sqr_g,vw_sqr_g,wu_sqr_g 
-  attributes(managed) :: uv_avg_l,vw_avg_l,wu_avg_l,uv_sqr_l,vw_sqr_l,wu_sqr_l 
-  attributes(managed) :: vorx_avg_g,vorx_sqr_g 
-  attributes(managed) :: vorx_avg_l,vorx_sqr_l 
-  attributes(managed) :: void_avg,void_sqr 
-  attributes(managed) :: tmp_avg_g,tmp_sqr_g 
-  attributes(managed) :: tmp_avg_l,tmp_sqr_l 
-  attributes(managed) :: utmp_avg_g,vtmp_avg_g,wtmp_avg_g,utmp_sqr_g,vtmp_sqr_g,wtmp_sqr_g  
-  attributes(managed) :: utmp_avg_l,vtmp_avg_l,wtmp_avg_l,utmp_sqr_l,vtmp_sqr_l,wtmp_sqr_l  
+  !@cuf attributes(managed) :: vorx,uv,vw,wu,utmp,vtmp,wtmp
+  !@cuf attributes(managed) :: u_avg_g,v_avg_g,w_avg_g,u_sqr_g,v_sqr_g,w_sqr_g 
+  !@cuf attributes(managed) :: u_avg_l,v_avg_l,w_avg_l,u_sqr_l,v_sqr_l,w_sqr_l 
+  !@cuf attributes(managed) :: uv_avg_g,vw_avg_g,wu_avg_g,uv_sqr_g,vw_sqr_g,wu_sqr_g 
+  !@cuf attributes(managed) :: uv_avg_l,vw_avg_l,wu_avg_l,uv_sqr_l,vw_sqr_l,wu_sqr_l 
+  !@cuf attributes(managed) :: vorx_avg_g,vorx_sqr_g 
+  !@cuf attributes(managed) :: vorx_avg_l,vorx_sqr_l 
+  !@cuf attributes(managed) :: void_avg,void_sqr 
+  !@cuf attributes(managed) :: tmp_avg_g,tmp_sqr_g 
+  !@cuf attributes(managed) :: tmp_avg_l,tmp_sqr_l 
+  !@cuf attributes(managed) :: utmp_avg_g,vtmp_avg_g,wtmp_avg_g,utmp_sqr_g,vtmp_sqr_g,wtmp_sqr_g  
+  !@cuf attributes(managed) :: utmp_avg_l,vtmp_avg_l,wtmp_avg_l,utmp_sqr_l,vtmp_sqr_l,wtmp_sqr_l  
 #endif
-#endif
+  integer :: n1, n2, n3
+  integer :: ng1, ng2, ng3
   !
   call MPI_INIT(ierr)
   call MPI_COMM_RANK(MPI_COMM_WORLD,myid,ierr)
   !
+  call profiler_init()
+  !
   ! read parameter file
   !
-#if defined(_USE_NVTX)
-  call nvtxStartRange("readInput")
-#endif
   call read_input(myid)
-#if defined(_USE_NVTX)
-  call nvtxEndRange
-#endif
   !
   ! create data folder and subfolders for post-processing, if they do not exist.
   !
   inquire(file='data/',exist=is_data)
   if(.not.is_data.and.myid.eq.0) call execute_command_line('mkdir -p data')
   datadir = 'data/'
+  !
 #if defined(_DO_POSTPROC)
   inquire(file='data/post/',exist=is_data)
   if(.not.is_data.and.myid.eq.0) call execute_command_line('mkdir -p data/post')
@@ -248,13 +233,14 @@ program flutas
   ! initialize MPI/OpenMP
   !
   !$call omp_set_num_threads(nthreadsmax)
-#if defined(_USE_NVTX)
-  call nvtxStartRange("initmpi")
-#endif
   call initmpi(.false.,ng,cbcpre,dims_in,dims_xyz,dims,n)
-#if defined(_USE_NVTX)
-  call nvtxEndRange
-#endif
+  !
+  n1 = n(1)
+  n2 = n(2)
+  n3 = n(3)
+  ng1 = ng(1)
+  ng2 = ng(2)
+  ng3 = ng(3)
   !
   twi = MPI_WTIME()
   !
@@ -267,9 +253,6 @@ program flutas
   !
   ! allocate memory
   !
-#if defined(_USE_NVTX)
-  call nvtxStartRange("variable_allocations")
-#endif
   allocate(p(0:n(1)+1,0:n(2)+1,0:n(3)+1) , &
            u(1-nh_u:n(1)+nh_u,1-nh_u:n(2)+nh_u,1-nh_u:n(3)+nh_u) , &
            v(1-nh_u:n(1)+nh_u,1-nh_u:n(2)+nh_u,1-nh_u:n(3)+nh_u) , &
@@ -308,106 +291,64 @@ program flutas
            zf_g(  1-nh_d:ng(3)+nh_d), &
            dzci_g(1-nh_d:ng(3)+nh_d), &
            dzfi_g(1-nh_d:ng(3)+nh_d))
-  allocate(rhsbp)
-  allocate(rhsbp%x(n(2),n(3),0:1), &
-           rhsbp%y(n(1),n(3),0:1), &
-           rhsbp%z(n(1),n(2),0:1))
+  allocate(rhsbp_x(n(2),n(3),0:1), &
+           rhsbp_y(n(1),n(3),0:1), &
+           rhsbp_z(n(1),n(2),0:1))
   !
   ! prefetching of the variables (TODO: remember to add the one of x-pencil!)
   !
-#if defined(_OPENACC)
-  istat = cudaMemAdvise(u, size(u), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(v, size(v), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(w, size(w), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(p, size(p), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(up, size(up), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(vp, size(vp), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(wp, size(wp), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(pp, size(pp), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(dudtrko, size(dudtrko), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(dvdtrko, size(dvdtrko), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(dwdtrko, size(dwdtrko), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemPrefetchAsync(u, size(u), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(v, size(v), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(w, size(w), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(p, size(p), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(up, size(up), mydev, 0)
-  istat = cudaMemPrefetchAsync(vp, size(vp), mydev, 0)
-  istat = cudaMemPrefetchAsync(wp, size(wp), mydev, 0)
-  istat = cudaMemPrefetchAsync(pp, size(pp), mydev, 0)
-  istat = cudaMemPrefetchAsync(dudtrko, size(dudtrko), mydev, 0)
-  istat = cudaMemPrefetchAsync(dvdtrko, size(dvdtrko), mydev, 0)
-  istat = cudaMemPrefetchAsync(dwdtrko, size(dwdtrko), mydev, 0)
-  !
-  istat = cudaMemAdvise(tmp, size(tmp), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise( ka, size( ka), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(cpp, size(cpp), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(   dtmpdtrk,    size(dtmpdtrk), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(dtmpdtrkold, size(dtmpdtrkold), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemPrefetchAsync(tmp, size(tmp), mydev, 0)
-  istat = cudaMemPrefetchAsync(ka, size(ka), mydev, 0)
-  istat = cudaMemPrefetchAsync(cpp, size(cpp), mydev, 0)
-  istat = cudaMemPrefetchAsync(   dtmpdtrk,    size(dtmpdtrk), mydev, 0)
-  istat = cudaMemPrefetchAsync(dtmpdtrkold, size(dtmpdtrkold), mydev, 0)
-  !
-  istat = cudaMemAdvise(rhsbp%x, size(rhsbp%x), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(rhsbp%y, size(rhsbp%y), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(rhsbp%z, size(rhsbp%z), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemPrefetchAsync(rhsbp%x, size(rhsbp%x), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(rhsbp%y, size(rhsbp%y), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(rhsbp%z, size(rhsbp%z), cudaCpuDeviceId, 0)
-  !
-  istat = cudaMemAdvise(zc, size(zc), cudaMemAdviseSetReadMostly, 0)
-  istat = cudaMemAdvise(zf, size(zf), cudaMemAdviseSetReadMostly, 0)
-  istat = cudaMemAdvise(dzc, size(dzc), cudaMemAdviseSetReadMostly, 0)
-  istat = cudaMemAdvise(dzf, size(dzf), cudaMemAdviseSetReadMostly, 0)
-  istat = cudaMemAdvise(dzci, size(dzci), cudaMemAdviseSetReadMostly, 0)
-  istat = cudaMemAdvise(dzfi, size(dzfi), cudaMemAdviseSetReadMostly, 0)
+  !@cuf istat = cudaMemAdvise(u, size(u), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(v, size(v), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(w, size(w), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(p, size(p), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(up, size(up), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(vp, size(vp), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(wp, size(wp), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(pp, size(pp), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(dudtrko, size(dudtrko), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(dvdtrko, size(dvdtrko), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(dwdtrko, size(dwdtrko), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(tmp, size(tmp), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise( ka, size( ka), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(cpp, size(cpp), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(dtmpdtrk, size(dtmpdtrk), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(dtmpdtrkold, size(dtmpdtrkold), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(rhsbp_x, size(rhsbp_x), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(rhsbp_y, size(rhsbp_y), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(rhsbp_z, size(rhsbp_z), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(lambdaxyp, size(lambdaxyp), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(zc, size(zc), cudaMemAdviseSetReadMostly, 0)
+  !@cuf istat = cudaMemAdvise(zf, size(zf), cudaMemAdviseSetReadMostly, 0)
+  !@cuf istat = cudaMemAdvise(dzc, size(dzc), cudaMemAdviseSetReadMostly, 0)
+  !@cuf istat = cudaMemAdvise(dzf, size(dzf), cudaMemAdviseSetReadMostly, 0)
+  !@cuf istat = cudaMemAdvise(dzci, size(dzci), cudaMemAdviseSetReadMostly, 0)
+  !@cuf istat = cudaMemAdvise(dzfi, size(dzfi), cudaMemAdviseSetReadMostly, 0)
   !
 #if defined(_USE_VOF)
-  istat = cudaMemAdvise(mu, size(mu), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(pold, size(pold), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(rho, size(rho), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(kappa, size(kappa), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(psi, size(psi), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(d_thinc, size(d_thinc), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(nor, size(nor), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(cur_t, size(cur_t), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemPrefetchAsync(pold, size(pold), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(mu, size(mu), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(rho, size(rho), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(kappa, size(kappa), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(psi, size(psi), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(d_thinc, size(d_thinc), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(nor, size(nor), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(cur_t, size(cur_t), cudaCpuDeviceId, 0)
+  !@cuf istat = cudaMemAdvise(mu, size(mu), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(pold, size(pold), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(rho, size(rho), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(kappa, size(kappa), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(psi, size(psi), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(d_thinc, size(d_thinc), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(nor, size(nor), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(cur_t, size(cur_t), cudaMemAdviseSetPreferredLocation, mydev)
 #endif
   !
 #if defined(_DO_POSTPROC)
-  istat = cudaMemAdvise(vorx, size(vorx), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(  uv,   size(uv), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(  vw,   size(vw), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(  wu,   size(wu), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(utmp, size(utmp), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(vtmp, size(vtmp), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemAdvise(wtmp, size(wtmp), cudaMemAdviseSetPreferredLocation, mydev)
-  istat = cudaMemPrefetchAsync(vorx, size(vorx), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(  uv,   size(uv), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(  vw,   size(vw), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(  wu,   size(wu), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(utmp, size(utmp), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(vtmp, size(vtmp), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(wtmp, size(wtmp), cudaCpuDeviceId, 0)
-#endif
-  !
-#endif
-#if defined(_USE_NVTX)
-  call nvtxEndRange
+  !@cuf istat = cudaMemAdvise(vorx, size(vorx), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(  uv,   size(uv), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(  vw,   size(vw), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(  wu,   size(wu), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(utmp, size(utmp), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(vtmp, size(vtmp), cudaMemAdviseSetPreferredLocation, mydev)
+  !@cuf istat = cudaMemAdvise(wtmp, size(wtmp), cudaMemAdviseSetPreferredLocation, mydev)
 #endif
   !
   if(myid.eq.0) print*, '*******************************'
   if(myid.eq.0) print*, '*** Beginning of simulation ***'
   if(myid.eq.0) print*, '*******************************'
+  !
 #if defined(_OPENACC)
   if(myid.eq.0) then
     print*, ' GPU accelerated version, grid size:', n(1)*dims(1), n(2)*dims(2), n(3)*dims(3)
@@ -421,7 +362,15 @@ program flutas
   nh_up = abs(lbound(up ,1))+1
   nh_v  = abs(lbound(psi,1))+1
   !
-  ! halo generation
+#if defined(_OPENACC)
+  !
+  ! Allocate buffers for halo communications (GPU-only)
+  !
+  call alloc_buf(n,nh_d)
+  !
+#else
+  ! 
+  ! halo generation using MPI derivate datatypes (CPU-only)
   !
   call halo_gen(n,nh_u ,halo_u )
   call halo_gen(n,nh_t ,halo_t )
@@ -430,36 +379,11 @@ program flutas
   call halo_gen(n,nh_v ,halo_v )
   call halo_gen(n,nh_d ,halo_d )
   !
-#if defined(_OPENACC)
-  !
-  ! Allocate buffers for GPU halo communications
-  !
-  call alloc_buf(n,nh_d)
-  !
 #endif
   !
   ! initialize the grid (using global variables along z)
   !
-#if defined(_OPENACC)
-  istat = cudaMemPrefetchAsync(zc, size(zc), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(zf, size(zf), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(dzc, size(dzc), cudaCpuDeviceId, 0)
-  istat = cudaMemPrefetchAsync(dzf, size(dzf), cudaCpuDeviceId, 0)
-#endif
-#if defined(_USE_NVTX)
-  call nvtxStartRange("initgrid")
-#endif
   call initgrid(inivel,ng(3),gr,lz,nh_d,dzc_g,dzf_g,zc_g,zf_g) 
-#if defined(_USE_NVTX)
-  call nvtxEndRange
-#endif
-  !
-#if defined(_OPENACC)
-  istat = cudaMemPrefetchAsync(zc, size(zc), mydev, 0)
-  istat = cudaMemPrefetchAsync(zf, size(zf), mydev, 0)
-  istat = cudaMemPrefetchAsync(dzc, size(dzc), mydev, 0)
-  istat = cudaMemPrefetchAsync(dzf, size(dzf), mydev, 0)
-#endif
   !
   if(myid.eq.0) then
     open(99,file=trim(datadir)//'grid.bin',access='direct',recl=4*ng(3)*sizeof(1._rp))
@@ -475,24 +399,15 @@ program flutas
       write(99,*) l(1),l(2),l(3)
     close(99)
   endif
-  !$acc kernels
-  do k=1-nh_d,ng(3)+nh_d
+  !
+  do k=1-nh_d,ng3+nh_d
     dzfi_g(k) = 1._rp/dzf_g(k)
     dzci_g(k) = 1._rp/dzc_g(k)
   enddo
-  !$acc end kernels
-  !@cuf istat=cudaDeviceSynchronize()
-  !
-#if defined(_OPENACC)
-  istat = cudaMemPrefetchAsync(dzci, size(dzci), mydev, 0)
-  istat = cudaMemPrefetchAsync(dzfi, size(dzfi), mydev, 0)
-  istat = cudaMemPrefetchAsync(zc, size(zc), mydev, 0)
-#endif
   !
   ! compute the spacing along z in local coordinates
   !
-  !$acc kernels
-  do k=1-nh_d,n(3)+nh_d
+  do k=1-nh_d,n3+nh_d
     kk      = k + ijk_start(3)
     zc(k)   = zc_g(kk)
     zf(k)   = zf_g(kk)
@@ -501,8 +416,8 @@ program flutas
     dzfi(k) = 1._rp/dzf(k)
     dzci(k) = 1._rp/dzc(k)
   enddo
-  !$acc end kernels
-  !@cuf istat=cudaDeviceSynchronize()
+  !@cuf istat = cudaMemPrefetchAsync(dzci, size(dzci), mydev, 0)
+  !@cuf istat = cudaMemPrefetchAsync(dzfi, size(dzfi), mydev, 0)
   !
   ! test input files before proceeding with the calculation
   !
@@ -516,78 +431,51 @@ program flutas
     is_first_tmp = .true.
     is_first_vel = .true.
     !
-#if defined(_OPENACC)
-    istat = cudaMemPrefetchAsync(dzci, size(dzci), cudaCpuDeviceId, 0)
-    istat = cudaMemPrefetchAsync(dzfi, size(dzfi), cudaCpuDeviceId, 0)
-#endif
-    !
     if(.not.late_init) then 
       !
       ! Initialize VoF 
       !
-#if defined(_USE_NVTX)
-      call nvtxStartRange('initvof')
-#endif
       call initvof(n,dli,psi)
+      !@cuf istat = cudaMemPrefetchAsync(p, size(psi), mydev, 0)
       call boundp(cbcvof,n,bcvof,nh_d,nh_v,halo_v,dl,dzc,dzf,psi)
       call alloc_vof_var(n(1),n(2),n(3))
-#if defined(_USE_NVTX)
-      call nvtxEndRange
-#endif
       !
     endif
     !
     ! Initialize temperature 
     !
-#if defined(_USE_NVTX)
-    call nvtxStartRange('inittmp')
-#endif
     call inittmp(initmp,n(1),n(2),n(3),nh_v,nh_t,dims,.false.,0.5d0,psi,tmp)
+    !@cuf istat = cudaMemPrefetchAsync(tmp, size(tmp), mydev, 0)
     call boundp(cbctmp,n,bctmp,nh_d,nh_t,halo_t,dl,dzc,dzf,tmp)
-#if defined(_USE_NVTX)
-    call nvtxEndRange
-#endif
     !
-#if defined(_USE_NVTX)
-    call nvtxEndRange
-#endif
+    ! [NOTE] zc is a managed array, lz is scalar. mmmhhh
     call initflow(inivel,n(1),n(2),n(3),dims,nh_d,nh_u,nh_p,zc/lz,dzc/lz,dzf/lz,u,v,w,p)
     !
-    ! set to zeros the rhs of momentum equation 
-    ! (only for the first time-step, not for the restarting)
-    ! 
     !$acc kernels
-    do k=1,n(3)
-      do j=1,n(2)
-        do i=1,n(1)
+    do k=1,n3
+      do j=1,n2
+        do i=1,n1
+          ! 
+          ! set to zeros the rhs of momentum equation 
+          ! (only for the first time-step, not for the restarting)
           dudtrko(i,j,k) = 0._rp
           dvdtrko(i,j,k) = 0._rp
           dwdtrko(i,j,k) = 0._rp
-        enddo
-      enddo
-    enddo
-    !$acc end kernels
-    !@cuf istat=cudaDeviceSynchronize()
-    !
-    ! set to zeros the rhs of temperature equation 
-    ! (only for the first time-step, not for the restarting)
-    ! 
-    !$acc kernels
-    do k=1,n(3)
-      do j=1,n(2)
-        do i=1,n(1)
+          !
+          ! set to zeros the rhs of temperature equation 
+          ! (only for the first time-step, not for the restarting)
           dtmpdtrkold(i,j,k) = 0._rp
         enddo
       enddo
     enddo
     !$acc end kernels
-    !@cuf istat=cudaDeviceSynchronize()
     !
     if(myid.eq.0) print*, '*** Initial condition succesfully set ***'
     !
   else
     !
     action_load = 'r'
+    !
     call load(action_load,trim(datadir)//'fldu.bin',n,      u(1:n(1),1:n(2),1:n(3)))
     call load(action_load,trim(datadir)//'fldv.bin',n,      v(1:n(1),1:n(2),1:n(3)))
     call load(action_load,trim(datadir)//'fldw.bin',n,      w(1:n(1),1:n(2),1:n(3)))
@@ -608,13 +496,11 @@ program flutas
     call alloc_vof_var(n(1),n(2),n(3)) ! to put here (important for the restarting)
     !
   endif
-#if defined(_OPENACC)
-  istat = cudaMemPrefetchAsync(u, size(u), mydev, 0)
-  istat = cudaMemPrefetchAsync(v, size(v), mydev, 0)
-  istat = cudaMemPrefetchAsync(w, size(w), mydev, 0)
-  istat = cudaMemPrefetchAsync(p, size(p), mydev, 0)
-  istat = cudaMemPrefetchAsync(pold, size(pold), mydev, 0)
-#endif
+  !
+  !@cuf istat = cudaMemPrefetchAsync(dudtrko, size(dudtrko), mydev, 0)
+  !@cuf istat = cudaMemPrefetchAsync(dvdtrko, size(dvdtrko), mydev, 0)
+  !@cuf istat = cudaMemPrefetchAsync(dwdtrko, size(dwdtrko), mydev, 0)
+  !@cuf istat = cudaMemPrefetchAsync(dtmpdtrkold, size(dtmpdtrkold), mydev, 0)
   !
   ! set boundary conditions on the initial/loaded fields
   !
@@ -627,15 +513,15 @@ program flutas
   ! in time-splitting of the pressure equation
   !
   !$acc kernels 
-  do k=1,n(3)
-    do j=1,n(2)
-      do i=1,n(1)
+  do k=1,n3
+    do j=1,n2
+      do i=1,n1
         pold(i,j,k) = p(i,j,k)
       end do
     end do
   end do
   !$acc end kernels
-  !@cuf istat=cudaDeviceSynchronize()
+  !
   call boundp(cbcpre,n,bcpre,nh_d,nh_p,halo_p,dl,dzc,dzf,pold)
   !
   ! update the quantities derived from VoF using the lastest available VoF field
@@ -651,11 +537,30 @@ program flutas
   call boundp(cbcvof,n,bcvof,nh_d,nh_v,halo_v,dl,dzc,dzf,cpp)
   !
   ! post-process and write initial condition
+#if !defined(__BENCHMARK_NO_IO)
+  !
+  call profiler_start("OUT:initial", tag = .true., tag_color = COLOR_WHITE)
+  !
+  ! Prefetching back pre IO
+  !@cuf istat = cudaMemPrefetchAsync(u, size(u), cudaCpuDeviceId, 0)
+  !@cuf istat = cudaMemPrefetchAsync(v, size(v), cudaCpuDeviceId, 0)
+  !@cuf istat = cudaMemPrefetchAsync(w, size(w), cudaCpuDeviceId, 0)
+  !@cuf istat = cudaMemPrefetchAsync(p, size(p), cudaCpuDeviceId, 0)
+  !@cuf istat = cudaMemPrefetchAsync(psi, size(psi), cudaCpuDeviceId, 0)
+  !@cuf istat = cudaMemPrefetchAsync(tmp, size(tmp), cudaCpuDeviceId, 0)   
   !
   write(fldnum,'(i9.9)') istep
   include 'out1d.h90'
   include 'out2d.h90'
   include 'out3d.h90'
+  !
+  ! Prefetching post IO
+  !@cuf istat = cudaMemPrefetchAsync(u, size(u), mydev, 0)
+  !@cuf istat = cudaMemPrefetchAsync(v, size(v), mydev, 0)
+  !@cuf istat = cudaMemPrefetchAsync(w, size(w), mydev, 0)
+  !
+  call profiler_stop("OUT:initial")
+#endif
   !
   ! compute an initial time-step
   !
@@ -672,13 +577,18 @@ program flutas
   dti  = 1._rp/dt
   kill = .false.
   !
+  ! Prefetching post IO
+  !@cuf istat = cudaMemPrefetchAsync(psi, size(psi), mydev, 0)
+  !@cuf istat = cudaMemPrefetchAsync(p, size(p), mydev, 0)
+  !@cuf istat = cudaMemPrefetchAsync(tmp, size(tmp), mydev, 0)
+  !
   ! preliminary checks
   ! 
-  vof_min = minval(psi(1:n(1),1:n(2),1:n(3)))
+  vof_min = minval(psi(1:n1,1:n2,1:n3))
   call mpi_allreduce(MPI_IN_PLACE,vof_min,1,MPI_REAL_RP,MPI_MIN,MPI_COMM_WORLD,ierr)
-  vof_max = maxval(psi(1:n(1),1:n(2),1:n(3)))
+  vof_max = maxval(psi(1:n1,1:n2,1:n3))
   call mpi_allreduce(MPI_IN_PLACE,vof_max,1,MPI_REAL_RP,MPI_MAX,MPI_COMM_WORLD,ierr)
-  vol_p1  = sum(psi(1:n(1),1:n(2),1:n(3)))*dl(1)*dl(2)*dl(3)
+  vol_p1  = sum(psi(1:n1,1:n2,1:n3))*dl(1)*dl(2)*dl(3)
   call mpi_allreduce(MPI_IN_PLACE,vol_p1 ,1,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
   !
   var(:) = 0._rp
@@ -694,13 +604,20 @@ program flutas
   ! and deallocate global arrays (not needed anymore) 
   !
   call initsolver(n,dims,dims_xyz(:,3),dli,nh_d,dzci_g,dzfi_g,cbcpre,bcpre(:,:),(/'c','c','c'/),lambdaxyp, & 
-                  ap,bp,cp,arrplanp,normfftp,rhsbp%x,rhsbp%y,rhsbp%z)
+                  ap,bp,cp,arrplanp,normfftp,rhsbp_x,rhsbp_y,rhsbp_z)
+  !@cuf istat = cudaMemPrefetchAsync(rhsbp_x, size(rhsbp_x), mydev, 0)
+  !@cuf istat = cudaMemPrefetchAsync(rhsbp_y, size(rhsbp_y), mydev, 0)
+  !@cuf istat = cudaMemPrefetchAsync(rhsbp_z, size(rhsbp_z), mydev, 0)
+  !@cuf istat = cudaMemPrefetchAsync(lambdaxyp, size(lambdaxyp), mydev, 0)
   deallocate(dzc_g,dzf_g,zc_g,zf_g,dzci_g,dzfi_g)
   !
   ! main loop
   !
   if(myid.eq.0) print*, '*** Calculation loop starts now ***'
   is_done = .false.
+  !
+  !@cuf istat = cudaMemGetInfo( freeMem, totMem )
+  !@cuf if(myid.eq.0) print*, 'Used memory = ', totMem - freeMem
   !
   do while(.not.is_done)
     !
@@ -709,6 +626,9 @@ program flutas
 #endif
     !
     istep = istep + 1
+    !
+    call profiler_start("STEP", tag = .true., tag_color = COLOR_WHITE)
+    !
     time  = time + dt
     !
     if(myid.eq.0) print*, 'Timestep #', istep, 'Time = ', time
@@ -717,7 +637,7 @@ program flutas
       !
       call initvof(n,dli,psi)
       call update_vof(n,dli,nh_d,dzc,dzf,nh_v,halo_v,psi,nor,cur_t,kappa,d_thinc)
-      call alloc_vof_var(n(1),n(2),n(3))
+      call alloc_vof_var(n(1),n(2),n(3)) ! [NOTE] Does it make sense to call alloc_vof_var here?
       !
       call update_property(n,(/mu1 ,mu2 /),psi,mu ) 
       call update_property(n,(/rho1,rho2/),psi,rho)
@@ -732,38 +652,36 @@ program flutas
     ! 0. save quantities from the previous time-step
     !
 #if defined(_OPENACC)
-    !$acc kernels
+    !$acc parallel loop collapse(3) present(p, pp, pold)
 #else
     !$OMP PARALLEL DO DEFAULT(none) &
     !$OMP PRIVATE(i,j,k) &
     !$OMP SHARED(p,pold,pp)
 #endif
-    do k=1,n(3)
-      do j=1,n(2)
-        do i=1,n(1)
+    do k=1,n3
+      do j=1,n2
+        do i=1,n1
           pp(i,j,k)   = (1._rp+(dt/dto))*p(i,j,k) - (dt/dto)*pold(i,j,k)
           pold(i,j,k) = p(i,j,k)
         enddo
       enddo
     enddo
 #if defined(_OPENACC)
-    !$acc end kernels
-    !@cuf istat=cudaDeviceSynchronize()
+    !$acc end parallel loop 
 #else
     !$OMP END PARALLEL DO
 #endif
+    !
     call boundp(cbcpre,n,bcpre,nh_d,nh_p,halo_p,dl,dzc,dzf,pp  )
     call boundp(cbcpre,n,bcpre,nh_d,nh_p,halo_p,dl,dzc,dzf,pold)
     !
     ! 1. VoF advection and properties update --> vof^(n+1) 
     !
-    if((.not.late_init).or.        &              ! Normal run (initialized at i=0)
+    if ((.not.late_init).or. &                    ! Normal run (initialized at i=0)
        (late_init.and.istep.ge.i_late_init)) then ! in case we want first to run without advecting the VoF
-
       !
-#if defined(_USE_NVTX)
-      call nvtxStartRange("FullVof")
-#endif
+      call profiler_start("VOF", tag = .true., tag_color = COLOR_YELLOW)
+      !
       call advvof(n,dli,dt,halo_v,nh_d,nh_u,dzc,dzf,u,v,w,psi,nor,cur_t,kappa,d_thinc)
       !
       call update_property(n,(/mu1 ,mu2 /),psi,mu )           
@@ -774,22 +692,16 @@ program flutas
       call boundp(cbcvof,n,bcvof,nh_d,nh_v,halo_v,dl,dzc,dzf,ka )
       call update_property(n,(/cp1,cp2/),psi,cpp)           
       call boundp(cbcvof,n,bcvof,nh_d,nh_v,halo_v,dl,dzc,dzf,cpp)
-#if defined(_USE_NVTX)
-      call nvtxEndRange
-#endif
+      !
+      call profiler_stop("VOF")
       !
     endif
     !
     ! 2. Temperature advection and thermodynamic pressure --> tmp^(n+1)
     !
-#if defined(_USE_NVTX)
-    call nvtxStartRange("ab2_tmp")
-#endif
-    call ab2_tmp(is_first_tmp,n(1),n(2),n(3),dli(1),dli(2),dli(3),nh_d,nh_t,dt,dto,rho,cpp,ka,u,v,w, &
+    call ab2_tmp(is_first_tmp,n(1),n(2),n(3),dli(1),dli(2),dli(3),nh_u,nh_t,dt,dto,rho,cpp,ka,u,v,w, &
                  tmp,dtmpdtrk,dtmpdtrkold)
-#if defined(_USE_NVTX)
-    call nvtxEndRange
-#endif
+    !
     call boundp(cbctmp,n,bctmp,nh_d,nh_t,halo_t,dl,dzc,dzf,tmp)
     !
 #if !defined(_VOF_DBG)
@@ -799,76 +711,65 @@ program flutas
     rho0i = 1._rp/rho0
     dpdl_c(1:3) = 0._rp
     !
-#if defined(_USE_NVTX)
-    call nvtxStartRange("rk")
-#endif
+    !
+    call profiler_start("RK", tag = .true., tag_color = COLOR_RED)
+    !
     call rk(is_first_vel,n(1),n(2),n(3),dims,dxi,dyi,dzi,nh_d,nh_u,dt,dto,rho0i,dzci,dzfi,u,v,w,p,pp, &
             kappa,psi,mu,rho, & 
 #if defined(_BOUSSINESQ)
             nh_t,tmp,& 
 #endif
             dudtrko,dvdtrko,dwdtrko,up,vp,wp,f)
-#if defined(_USE_NVTX)
-    call nvtxEndRange
-#endif
+    !
+    call profiler_stop("RK")
+    !
     call bounduvw(cbcvel,n,bcvel,nh_d,nh_up,halo_up,no_outflow,dl,dzc,dzf,up,vp,wp)
     dpdl_c(1:3) = dpdl_c(1:3) + f(1:3) + dpdl(1:3)*dt
     !
-#if defined(_USE_NVTX)
-    call nvtxStartRange("fillps")
-#endif
     call fillps(n(1),n(2),n(3),nh_d,nh_up,dxi,dyi,dzi,dzci,dzfi,dti,rho0,up,vp,wp,p)
     !
-#if defined(_USE_NVTX)
-    call nvtxEndRange
+    call updt_rhs_b(n(1),n(2),n(3),(/'c','c','c'/),cbcpre,nh_p,rhsbp_x,rhsbp_y,rhsbp_z,p)
+    !
 #endif
     !
-    call updt_rhs_b(n(1),n(2),n(3),(/'c','c','c'/),cbcpre,nh_p,rhsbp%x,rhsbp%y,rhsbp%z,p)
-#if defined(_USE_NVTX)
-    call nvtxStartRange("solver")
-#endif
+    call profiler_start("SOLVER", tag = .true., tag_color = COLOR_GREEN)
     !
 #if defined(_OPENACC)
     call solver(n_z,dims_xyz(:,3),arrplanp,normfftp,lambdaxyp,ap,bp,cp,cbcpre(:,:),(/'c','c','c'/),p)
 #else
     call solver_cpu(n,arrplanp,normfftp,lambdaxyp,ap,bp,cp,cbcpre(:,3),(/'c','c','c'/),p)
 #endif
-#if defined(_USE_NVTX)
-    call nvtxEndRange
-#endif
+    !
+    call profiler_stop("SOLVER")
+    !
     call boundp(cbcpre,n,bcpre,nh_d,nh_p,halo_p,dl,dzc,dzf,p)
-#if defined(_USE_NVTX)
-    call nvtxStartRange("CorrecEcc")
-#endif
+    !
+    call profiler_start("CORREC")
     !
     call correc(n(1),n(2),n(3),nh_d,nh_u,dxi,dyi,dzi,dzci,dt,rho0,p,up,vp,wp,rho,u,v,w)
     call bounduvw(cbcvel,n,bcvel,nh_d,nh_u,halo_u,is_outflow,dl,dzc,dzf,u,v,w)
     !
 #if defined(_OPENACC)
-    !$acc kernels
+    !$acc parallel loop collapse(3)
 #else
     !$OMP WORKSHARE
 #endif
-    do k=1,n(3)
-      do j=1,n(2)
-        do i=1,n(1)
+    do k=1,n3
+      do j=1,n2
+        do i=1,n1
           p(i,j,k) = pold(i,j,k) + p(i,j,k)
         enddo
       enddo
     enddo
 #if defined(_OPENACC)
-    !$acc end kernels
-    !@cuf istat=cudaDeviceSynchronize()
+    !$acc end parallel loop
 #else
     !$OMP END WORKSHARE
 #endif
+    !
     call boundp(cbcpre,n,bcpre,nh_d,nh_p,halo_p,dl,dzc,dzf,p)
     !
-#if defined(_USE_NVTX)
-    call nvtxEndRange
-#endif
-    !
-#endif 
+    call profiler_stop("CORREC")
     ! 
     write(fldnum,'(i9.9)') istep
     !
@@ -877,6 +778,8 @@ program flutas
     ! post-processing
     !
 #if defined(_DO_POSTPROC)
+    !
+    call profiler_start("POSTPROC", tag = .true., tag_color = COLOR_WHITE)
     !
     if((mod(istep,wall_deltai).eq.0).and.do_wall) then
       call wall_avg(avg_dir,n(1),n(2),n(3),ng(1),ng(2),ng(3),dli(1),dli(2),dli(3),nh_t,ka,tmp,time)
@@ -906,7 +809,10 @@ program flutas
      include 'time_averaging_liquid.h90'
      include 'time_averaging_gas.h90'
      include 'time_averaging_heat_transfer.h90'
+     if(mod(istep,iout1d).eq.0) i_av = 0
     endif
+    !
+    call profiler_stop("POSTPROC")
     !
 #endif
     !
@@ -953,9 +859,13 @@ program flutas
       !
     endif
     !
+    call profiler_stop("STEP")
+    !
     ! output routines below
     !
     if(mod(istep,iout0d).eq.0) then
+      !
+      call profiler_start("OUT:iout0d", tag = .true., tag_color = COLOR_WHITE)
       !
       var(:) = 0._rp
       var(1) = 1._rp*istep
@@ -994,62 +904,108 @@ program flutas
         var(10)  = meanvelw
         call out0d(trim(datadir)//'forcing.out',10,var)
       endif 
- 
+      !
+      call profiler_stop("OUT:iout0d")
       !
     endif
     !
     if(mod(istep,iout1d).eq.0) then
-     include 'out1d.h90'
+      call profiler_start("OUT:iout1d", tag = .true., tag_color = COLOR_WHITE)
+      ! [TODO] Prefetching GPU->CPU (and viceversa)
+      include 'out1d.h90'
+      call profiler_stop("OUT:iout1d")
     endif
     if(mod(istep,iout2d).eq.0) then
-     include 'out2d.h90'
+      call profiler_start("OUT:iout2d", tag = .true., tag_color = COLOR_WHITE)
+      ! [TODO] Prefetching GPU->CPU (and viceversa)
+      include 'out2d.h90'
+      call profiler_stop("OUT:iout2d")
     endif
     if(mod(istep,iout3d).eq.0) then
-     include 'out3d.h90'
+      call profiler_start("OUT:iout3d", tag = .true., tag_color = COLOR_WHITE)
+      ! [TODO] Prefetching GPU->CPU (and viceversa)
+      include 'out3d.h90'
+      call profiler_stop("OUT:iout3d")
     endif
     !
-    if(mod(istep,isave).eq.0.or.(is_done.and..not.kill)) then
+#if !defined(__BENCHMARK_NO_IO)
+    if ( (mod(istep,isave) .eq. 0) .or. is_done .and. (.not.kill) ) then
+      !
+      call profiler_start("OUT:isave", tag = .true., tag_color = COLOR_WHITE)
       !
       action_load = 'w'
       !
+      !@cuf istat = cudaMemPrefetchAsync(u, size(u), cudaCpuDeviceId, 0)
+      !@cuf istat = cudaMemPrefetchAsync(v, size(v), cudaCpuDeviceId, 0)
+      !@cuf istat = cudaMemPrefetchAsync(w, size(w), cudaCpuDeviceId, 0)
+      !@cuf istat = cudaMemPrefetchAsync(dudtrko, size(dudtrko), cudaCpuDeviceId, 0)
+      !@cuf istat = cudaMemPrefetchAsync(dvdtrko, size(dvdtrko), cudaCpuDeviceId, 0)
+      !@cuf istat = cudaMemPrefetchAsync(dwdtrko, size(dwdtrko), cudaCpuDeviceId, 0)
+      !@cuf istat = cudaMemPrefetchAsync(p, size(p), cudaCpuDeviceId, 0)
+      !@cuf istat = cudaMemPrefetchAsync(psi, size(psi), cudaCpuDeviceId, 0)
+      !@cuf istat = cudaMemPrefetchAsync(tmp, size(tmp), cudaCpuDeviceId, 0)   
+      !@cuf istat = cudaMemPrefetchAsync(dtmpdtrkold, size(dtmpdtrkold), cudaCpuDeviceId, 0)  
+      !
       inquire(file='data/fldu.bin', exist=is_data)
       if(myid.eq.0.and.is_data) call execute_command_line('mv data/fldu.bin   data/fldu_old.bin')
+      call load(action_load,trim(datadir)//'fldu.bin',n,      u(1:n(1),1:n(2),1:n(3)))
+      !@cuf if ( (mod(istep,isave)).eq. 0 .and. (.not. is_done) .and. (.not.kill) ) istat = cudaMemPrefetchAsync(u, size(u), mydev, 0)
+      !
       inquire(file='data/fldv.bin', exist=is_data)
       if(myid.eq.0.and.is_data) call execute_command_line('mv data/fldv.bin   data/fldv_old.bin')
+      call load(action_load,trim(datadir)//'fldv.bin',n,      v(1:n(1),1:n(2),1:n(3)))
+      !@cuf if ( (mod(istep,isave)).eq. 0 .and. (.not. is_done) .and. (.not.kill) ) istat = cudaMemPrefetchAsync(v, size(v), mydev, 0)
+      !
       inquire(file='data/fldw.bin', exist=is_data)
       if(myid.eq.0.and.is_data) call execute_command_line('mv data/fldw.bin   data/fldw_old.bin')
+      call load(action_load,trim(datadir)//'fldw.bin',n,      w(1:n(1),1:n(2),1:n(3)))   
+      !@cuf if ( (mod(istep,isave)).eq. 0 .and. (.not. is_done) .and. (.not.kill) ) istat = cudaMemPrefetchAsync(w, size(w), mydev, 0)
+      !
       inquire(file='data/flddu.bin', exist=is_data)
       if(myid.eq.0.and.is_data) call execute_command_line('mv data/flddu.bin  data/flddu_old.bin')
+      call load(action_load,trim(datadir)//'flddu.bin',n,dudtrko(1:n(1),1:n(2),1:n(3)))
+      !@cuf if ( (mod(istep,isave)).eq. 0 .and. (.not. is_done) .and. (.not.kill) ) istat = cudaMemPrefetchAsync(dudtrko, size(dudtrko), mydev, 0)
+      !
       inquire(file='data/flddv.bin', exist=is_data)
       if(myid.eq.0.and.is_data) call execute_command_line('mv data/flddv.bin  data/flddv_old.bin')
+      call load(action_load,trim(datadir)//'flddv.bin',n,dvdtrko(1:n(1),1:n(2),1:n(3)))
+      !@cuf if ( (mod(istep,isave)).eq. 0 .and. (.not. is_done) .and. (.not.kill) ) istat = cudaMemPrefetchAsync(dvdtrko, size(dvdtrko), mydev, 0)
+      !
       inquire(file='data/flddw.bin', exist=is_data)
       if(myid.eq.0.and.is_data) call execute_command_line('mv data/flddw.bin  data/flddw_old.bin')
+      call load(action_load,trim(datadir)//'flddw.bin',n,dwdtrko(1:n(1),1:n(2),1:n(3)))
+      !@cuf if ( (mod(istep,isave)).eq. 0 .and. (.not. is_done) .and. (.not.kill) ) istat = cudaMemPrefetchAsync(dwdtrko, size(dwdtrko), mydev, 0)
+      !
       inquire(file='data/flddp.bin', exist=is_data)
       if(myid.eq.0.and.is_data) call execute_command_line('mv data/fldp.bin   data/fldp_old.bin')
+      call load(action_load,trim(datadir)//'fldp.bin',n,      p(1:n(1),1:n(2),1:n(3)))
+      !@cuf if ( (mod(istep,isave)).eq. 0 .and. (.not. is_done) .and. (.not.kill) ) istat = cudaMemPrefetchAsync(p, size(p), mydev, 0)
+      !
       inquire(file='data/fldpsi.bin', exist=is_data)
       if(myid.eq.0.and.is_data) call execute_command_line('mv data/fldpsi.bin data/fldpsi_old.bin')
+      call load(action_load,trim(datadir)//'fldpsi.bin',n,    psi(1:n(1),1:n(2),1:n(3)))
+      !@cuf if ( (mod(istep,isave)).eq. 0 .and. (.not. is_done) .and. (.not.kill) ) istat = cudaMemPrefetchAsync(psi, size(psi), mydev, 0)
+      !
       inquire(file='data/fldtmp.bin', exist=is_data)
       if(myid.eq.0.and.is_data) call execute_command_line('mv data/fldtmp.bin data/fldtmp_old.bin')
+      call load(action_load,trim(datadir)//'fldtmp.bin',n,    tmp(1:n(1),1:n(2),1:n(3)))
+      !@cuf if ( (mod(istep,isave)).eq. 0 .and. (.not. is_done) .and. (.not.kill) ) istat = cudaMemPrefetchAsync(tmp, size(tmp), mydev, 0)
+      !
       inquire(file='data/flddtmp.bin', exist=is_data)
       if(myid.eq.0.and.is_data) call execute_command_line('mv data/flddtmp.bin data/flddtmp_old.bin')
+      call load(action_load,trim(datadir)//'flddtmp.bin',n,dtmpdtrkold(1:n(1),1:n(2),1:n(3)))
+      !@cuf if ( (mod(istep,isave)).eq. 0 .and. (.not. is_done) .and. (.not.kill) ) istat = cudaMemPrefetchAsync(dtmpdtrkold, size(dtmpdtrkold), mydev, 0)
+      !
       inquire(file='data/scalar.out', exist=is_data)
       if(myid.eq.0.and.is_data) call execute_command_line('mv data/scalar.out data/scalar_old.out')
-      !
-      call load(action_load,trim(datadir)//'fldu.bin',n,      u(1:n(1),1:n(2),1:n(3)))
-      call load(action_load,trim(datadir)//'fldv.bin',n,      v(1:n(1),1:n(2),1:n(3)))
-      call load(action_load,trim(datadir)//'fldw.bin',n,      w(1:n(1),1:n(2),1:n(3)))
-      call load(action_load,trim(datadir)//'flddu.bin',n,dudtrko(1:n(1),1:n(2),1:n(3)))
-      call load(action_load,trim(datadir)//'flddv.bin',n,dvdtrko(1:n(1),1:n(2),1:n(3)))
-      call load(action_load,trim(datadir)//'flddw.bin',n,dwdtrko(1:n(1),1:n(2),1:n(3)))
-      call load(action_load,trim(datadir)//'fldp.bin',n,      p(1:n(1),1:n(2),1:n(3)))
-      call load(action_load,trim(datadir)//'fldpsi.bin',n,    psi(1:n(1),1:n(2),1:n(3)))
-      call load(action_load,trim(datadir)//'fldtmp.bin',n,    tmp(1:n(1),1:n(2),1:n(3)))
-      call load(action_load,trim(datadir)//'flddtmp.bin',n,dtmpdtrkold(1:n(1),1:n(2),1:n(3)))
       call load_scalar(action_load,trim(datadir)//'scalar.out',time,istep,dto)
       !
       if(myid.eq.0) print*, '*** Checkpoint saved at time = ', time, 'time step = ', istep, '. ***'
       !
+      call profiler_stop("OUT:isave")
+      !
     endif
+#endif
     !
 #if defined(_TIMING)
     dt12 = MPI_WTIME()-dt12
@@ -1108,9 +1064,11 @@ program flutas
   !
   deallocate(lambdaxyp)
   deallocate(ap,bp,cp)
-  deallocate(rhsbp%x,rhsbp%y,rhsbp%z)
+  deallocate(rhsbp_x,rhsbp_y,rhsbp_z)
   !
   if(myid.eq.0.and.(.not.kill)) print*, '*** Fim ***'
+  !
+  call profiler_report()
   !
   call decomp_2d_finalize
   call MPI_FINALIZE(ierr)

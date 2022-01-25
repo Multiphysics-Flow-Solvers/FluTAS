@@ -67,7 +67,6 @@ module mod_post
           enddo
         enddo
         !$acc end kernels 
-        !@cuf istat=cudaDeviceSynchronize()
       endif
       call mpi_allreduce(MPI_IN_PLACE,nusselt_up,1,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
       nusselt_up = (nusselt_up/(1._rp*ngx*ngy))*(lref/ka_ref/deltaT)
@@ -86,7 +85,6 @@ module mod_post
           enddo
         enddo
         !$acc end kernels 
-        !@cuf istat=cudaDeviceSynchronize()
       endif
       call mpi_allreduce(MPI_IN_PLACE,nusselt_down,1,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
       nusselt_down = (nusselt_down/(1._rp*ngx*ngy))*(lref/ka_ref/deltaT)
@@ -116,7 +114,6 @@ module mod_post
           enddo
         enddo
         !$acc end kernels 
-        !@cuf istat=cudaDeviceSynchronize()
       endif
       call mpi_allreduce(MPI_IN_PLACE,nusselt_up,1,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
       nusselt_up = (nusselt_up/(1._rp*ngx*ngz))*(lref/ka_ref/deltaT)
@@ -135,7 +132,6 @@ module mod_post
           enddo
         enddo
         !$acc end kernels 
-        !@cuf istat=cudaDeviceSynchronize()
       endif
       call mpi_allreduce(MPI_IN_PLACE,nusselt_down,1,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
       nusselt_down = (nusselt_down/(1._rp*ngx*ngz))*(lref/ka_ref/deltaT)
@@ -165,7 +161,6 @@ module mod_post
           enddo
         enddo
         !$acc end kernels 
-        !@cuf istat=cudaDeviceSynchronize()
       endif
       call mpi_allreduce(MPI_IN_PLACE,nusselt_up,1,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
       nusselt_up = (nusselt_up/(1._rp*ngy*ngz))*(lref/ka_ref/deltaT)
@@ -184,7 +179,6 @@ module mod_post
           enddo
         enddo
         !$acc end kernels 
-        !@cuf istat=cudaDeviceSynchronize()
       endif
       call mpi_allreduce(MPI_IN_PLACE,nusselt_down,1,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
       nusselt_down = (nusselt_down/(1._rp*ngy*ngz))*(lref/ka_ref/deltaT)
@@ -199,7 +193,7 @@ module mod_post
     return
   end subroutine wall_avg
   !
-  subroutine time_avg(idir,do_avg,do_favre,fname,n,ng,istep,istep_av,iout1d, &
+  subroutine time_avg(idir,do_avg,do_favre,is_stag,fname,n,ng,istep,istep_av,iout1d, &
                       nh_d,nh_v,nh_p,psi,rho_p,p,pout1,pout2,pvol1,pvol2)
     !
     ! writes the profile of a variable averaged
@@ -208,6 +202,7 @@ module mod_post
     ! idir     -> the direction normal to the averaging plane
     ! do_avg   -> do or not averaging
     ! do_favre -> Favre or regular averaging
+    ! is_stag  -> decide if "p" is a cell-centered or staggered variable
     ! fname    -> name of the file
     ! n        -> size of the input array
     ! ng       -> total size of computational domain
@@ -229,8 +224,8 @@ module mod_post
     implicit none
     !
     integer         , intent(in   )                                     :: idir
-    logical         , intent(in   )                                     :: do_avg
-    logical         , intent(in   )                                     :: do_favre
+    logical         , intent(in   )                                     :: do_avg,do_favre
+    integer         , intent(in   ), dimension(3)                       :: is_stag
     character(len=*), intent(in   )                                     :: fname
     integer         , intent(in   ), dimension(3)                       :: n,ng
     integer         , intent(in   )                                     :: istep,istep_av,iout1d
@@ -242,8 +237,8 @@ module mod_post
     real(rp)        , intent(inout)                                     :: pvol1,pvol2
     !
     real(rp), allocatable, dimension(:) :: p1d1,p1d2,rhop
-    real(rp) :: factor,factor2,p_dl12
-    integer  :: i,j,k,mm
+    real(rp) :: factor,factor2,p_dl12,p_avg
+    integer  :: i,j,k,mm,qx,qy,qz
     integer  :: nx,ny,nz,ngx,ngy,ngz,ng_idir
     integer  :: start
     integer  :: iunit
@@ -261,7 +256,11 @@ module mod_post
     ngy     = ng(2)
     ngz     = ng(3)
     ng_idir = ng(idir)
-    start   = ijk_start(idir) 
+    start   = ijk_start(idir)
+    !
+    qx = is_stag(1)
+    qy = is_stag(2)
+    qz = is_stag(3) 
     !
     allocate(p1d1(ng(idir)),p1d2(ng(idir)),rhop(ng(idir)))
     !
@@ -284,7 +283,6 @@ module mod_post
     enddo
     !$acc end kernels 
     !
-    !   
     if(do_favre) then
       !
       ! Density-based averaging (Favre)
@@ -297,15 +295,15 @@ module mod_post
             do i=1,nx
               mm = start + i
               !
+              p_avg    = 0.5_rp*(p(i,j,k)+p(i-qx,j-qy,k-qz))
               rhop(mm) = rhop(mm) + p_dl12*rho_p(i,j,k)
-              p1d1(mm) = p1d1(mm) + p_dl12*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p(i,j,k)     
-              p1d2(mm) = p1d2(mm) + p_dl12*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p(i,j,k)**2 
+              p1d1(mm) = p1d1(mm) + p_dl12*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p_avg 
+              p1d2(mm) = p1d2(mm) + p_dl12*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p_avg**2 
               !
             enddo
           enddo
         enddo
         !$acc end kernels 
-        !@cuf istat=cudaDeviceSynchronize()
       case(2)
         !$acc kernels
         do k=1,nz
@@ -313,15 +311,15 @@ module mod_post
             do i=1,nx
               mm = start + j
               !
+              p_avg    = 0.5_rp*(p(i,j,k)+p(i-qx,j-qy,k-qz))
               rhop(mm) = rhop(mm) + p_dl12*rho_p(i,j,k)
-              p1d1(mm) = p1d1(mm) + p_dl12*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p(i,j,k)     
-              p1d2(mm) = p1d2(mm) + p_dl12*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p(i,j,k)**2 
+              p1d1(mm) = p1d1(mm) + p_dl12*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p_avg 
+              p1d2(mm) = p1d2(mm) + p_dl12*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p_avg**2 
               !
             enddo
           enddo
         enddo
         !$acc end kernels 
-        !@cuf istat=cudaDeviceSynchronize()
       case(3)
         !$acc kernels
         do k=1,nz
@@ -329,15 +327,15 @@ module mod_post
             do i=1,nx
               mm = start + k
               !
+              p_avg    = 0.5_rp*(p(i,j,k)+p(i-qx,j-qy,k-qz))
               rhop(mm) = rhop(mm) + p_dl12*rho_p(i,j,k)
-              p1d1(mm) = p1d1(mm) + p_dl12*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p(i,j,k)     
-              p1d2(mm) = p1d2(mm) + p_dl12*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p(i,j,k)**2 
+              p1d1(mm) = p1d1(mm) + p_dl12*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p_avg 
+              p1d2(mm) = p1d2(mm) + p_dl12*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p_avg**2 
               !
             enddo
           enddo
         enddo
         !$acc end kernels 
-        !@cuf istat=cudaDeviceSynchronize()
       end select
       !
       call mpi_allreduce(MPI_IN_PLACE,rhop(1),ng_idir,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
@@ -350,7 +348,6 @@ module mod_post
         p1d2(mm) = p1d2(mm)/(rhop(mm))
       enddo
       !$acc end kernels 
-      !@cuf istat=cudaDeviceSynchronize()
       !
     else
       !
@@ -364,14 +361,14 @@ module mod_post
             do i=1,nx
               mm = start + i
               !
-              p1d1(mm) = p1d1(mm) + (1._rp-psi(i,j,k))*p(i,j,k)
-              p1d2(mm) = p1d2(mm) + (1._rp-psi(i,j,k))*p(i,j,k)**2
+              p_avg    = 0.5_rp*(p(i,j,k)+p(i-qx,j-qy,k-qz))
+              p1d1(mm) = p1d1(mm) + (1._rp-psi(i,j,k))*p_avg
+              p1d2(mm) = p1d2(mm) + (1._rp-psi(i,j,k))*p_avg**2
               !
             enddo
           enddo
         enddo
         !$acc end kernels 
-        !@cuf istat=cudaDeviceSynchronize()
       case(2)
         !$acc kernels
         do k=1,nz
@@ -379,14 +376,14 @@ module mod_post
             do i=1,nx
               mm = start + j
               !
-              p1d1(mm) = p1d1(mm) + (1._rp-psi(i,j,k))*p(i,j,k)
-              p1d2(mm) = p1d2(mm) + (1._rp-psi(i,j,k))*p(i,j,k)**2
+              p_avg    = 0.5_rp*(p(i,j,k)+p(i-qx,j-qy,k-qz))
+              p1d1(mm) = p1d1(mm) + (1._rp-psi(i,j,k))*p_avg
+              p1d2(mm) = p1d2(mm) + (1._rp-psi(i,j,k))*p_avg**2
               !
             enddo
           enddo
         enddo
         !$acc end kernels 
-        !@cuf istat=cudaDeviceSynchronize()
       case(3)
         !$acc kernels
         do k=1,nz
@@ -394,14 +391,14 @@ module mod_post
             do i=1,nx
               mm = start + k
               !
-              p1d1(mm) = p1d1(mm) + (1._rp-psi(i,j,k))*p(i,j,k)
-              p1d2(mm) = p1d2(mm) + (1._rp-psi(i,j,k))*p(i,j,k)**2
+              p_avg    = 0.5_rp*(p(i,j,k)+p(i-qx,j-qy,k-qz))
+              p1d1(mm) = p1d1(mm) + (1._rp-psi(i,j,k))*p_avg
+              p1d2(mm) = p1d2(mm) + (1._rp-psi(i,j,k))*p_avg**2
               !
             enddo
           enddo
         enddo
         !$acc end kernels 
-        !@cuf istat=cudaDeviceSynchronize()
       end select
       !
       call mpi_allreduce(MPI_IN_PLACE,p1d1(1),ng_idir,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
@@ -413,7 +410,6 @@ module mod_post
         p1d2(mm) = p1d2(mm)*factor2
       enddo
       !$acc end kernels 
-      !@cuf istat=cudaDeviceSynchronize()
       !
     endif
     !
@@ -426,7 +422,6 @@ module mod_post
         pout2(mm) = p1d2(mm)
       enddo
       !$acc end kernels 
-      !@cuf istat=cudaDeviceSynchronize()
     else
       !$acc kernels
       do mm=1,ng_idir
@@ -434,7 +429,6 @@ module mod_post
         pout2(mm) = ((factor-1._rp)*pout2(mm)+p1d2(mm))/factor
       enddo
       !$acc end kernels 
-      !@cuf istat=cudaDeviceSynchronize()
     endif
     pvol1 = sum(pout1)
     pvol2 = sum(pout2)
@@ -452,11 +446,15 @@ module mod_post
         enddo
         close(iunit)
       endif
+      pout1 = 0._rp
+      pout2 = 0._rp
+      pvol1 = 0._rp
+      pvol2 = 0._rp
     endif
+    deallocate(p1d1,p1d2,rhop)
     !
     return
   end subroutine time_avg
-  !
   !
   subroutine compute_vorticity(nx,ny,nz,dxi,dyi,dzi,nh_u,v,w,vor)
     !
@@ -497,7 +495,6 @@ module mod_post
       enddo
     enddo
     !$acc end kernels 
-    !@cuf istat=cudaDeviceSynchronize()
     !
     return
   end subroutine compute_vorticity
@@ -513,8 +510,8 @@ module mod_post
     integer , intent(in )                                        :: nh_u,nh_s1!,nh_s2
     real(rp), intent(in ), dimension(1-nh_u :,1-nh_u :,1-nh_u :) :: u,v,w
     real(rp), intent(in ), dimension(1-nh_s1:,1-nh_s1:,1-nh_s1:) :: s1 ! generic scalar
-    real(rp), intent(out), dimension(     1:,     1:,     1:)    :: us1,vs1,ws1
-    real(rp), intent(out), dimension(     1:,     1:,     1:)    :: uv ,vw ,wu
+    real(rp), intent(out), dimension(      1:,      1:,      1:) :: us1,vs1,ws1
+    real(rp), intent(out), dimension(      1:,      1:,      1:) :: uv ,vw ,wu
     !
     integer :: i,j,k,im,jm,km
 #if defined(_OPENACC)
@@ -542,7 +539,6 @@ module mod_post
       enddo
     enddo
     !$acc end kernels 
-    !@cuf istat=cudaDeviceSynchronize()
     !
     return
   end subroutine mixed_variables

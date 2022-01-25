@@ -15,8 +15,8 @@ module mod_common_mpi
   real(rp), allocatable, dimension(:,:) :: xsl_buf, xrl_buf, xsr_buf, xrr_buf, &
                                            ysr_buf, yrr_buf, ysl_buf, yrl_buf, &
                                            zsr_buf, zrr_buf, zsl_buf, zrl_buf
-  integer :: mydev
-  ! investigate why... performance impact?
+  !@cuf integer :: mydev
+  !
 #if defined(_GPU_MPI)
   attributes(device)  :: xsl_buf, xrl_buf, xsr_buf, xrr_buf, &
                          ysr_buf, yrr_buf, ysl_buf, yrl_buf, &
@@ -27,6 +27,7 @@ module mod_common_mpi
                          zsr_buf, zrr_buf, zsl_buf, zrl_buf
 #endif
 #endif
+  !
   integer, dimension(3) :: ijk_start,ijk_start_x,ijk_start_y,ijk_start_z,n_x,n_y,n_z
   integer :: left,right,front,back,top,bottom,ipencil
   !

@@ -30,7 +30,7 @@
     integer :: i,j,k,jstart,jend,idx,decomp_y1distm
     integer ::       istart,iend,    decomp_x1distm
 #if defined(_USE_NVTX_FFT)
-    call nvtxStartRange("tranXYct",6)
+    call profiler_start("tranXYct", tag = .true., tag_color = COLOR_WHITE)
 #endif
     if (present(opt_decomp)) then
        decomp = opt_decomp
@@ -115,13 +115,7 @@
        endif
        m = dest
        istat = cudaEventSynchronize( a2a_event(iter) )
-#if defined(_USE_NVTX_FFT)
-       call nvtxStartRangeAsync("MPI",iter)
-#endif
        call MPI_SEND( work1_r_d(decomp%x1disp(m)+1), decomp%x1cnts(m), real_type, m, 0, DECOMP_2D_COMM_COL, ierror)
-#if defined(_USE_NVTX_FFT)
-       call nvtxEndRangeAsync
-#endif
        call MPI_WAIT(a2a_requests(iter), MPI_STATUS_IGNORE, ierror)
        m = sorc
        pos = decomp%y1disp(m) + 1
@@ -189,7 +183,7 @@
 #endif
 
 #if defined(_USE_NVTX_FFT)
-    call nvtxEndRange
+    call profiler_stop("tranXYct")
 #endif
 
     return
@@ -209,7 +203,7 @@
     integer :: ierror, istat, m, i1, i2, pos
     integer :: iter, dest, sorc, pow2
 #if defined(_USE_NVTX_FFT)
-    call nvtxStartRange("tranXY",6)
+    call profiler_start("tranXY", tag = .true., tag_color = COLOR_WHITE)
 #endif
     if (present(opt_decomp)) then
        decomp = opt_decomp
@@ -275,13 +269,7 @@
        endif
        m = dest
        istat = cudaEventSynchronize( a2a_event(iter) )
-#if defined(_USE_NVTX_FFT)
-       call nvtxStartRangeAsync("MPI",iter)
-#endif
        call MPI_SEND( work1_r_d(decomp%x1disp(m)+1), decomp%x1cnts(m), real_type, m, 0, DECOMP_2D_COMM_COL, ierror)
-#if defined(_USE_NVTX_FFT)
-       call nvtxEndRangeAsync
-#endif
        call MPI_WAIT(a2a_requests(iter), MPI_STATUS_IGNORE, ierror)
        m = sorc
        pos = decomp%y1disp(m) + 1
@@ -322,7 +310,7 @@
 #endif
 
 #if defined(_USE_NVTX_FFT)
-    call nvtxEndRange
+    call profiler_stop("tranXY")
 #endif
 
     return

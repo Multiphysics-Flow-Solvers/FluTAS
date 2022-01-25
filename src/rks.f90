@@ -6,9 +6,7 @@ module mod_rks
   use mod_common_mpi
   use mod_moms    , only: momtad
   use mod_types
-#if defined(_OPENACC)
-  use cudafor
-#endif
+  !@cuf use cudafor
   !
   implicit none
   !
@@ -39,12 +37,7 @@ module mod_rks
     real(rp) :: factor1,factor2
     integer  :: i,j,k,ii
     !
-#if defined(_OPENACC)
-    attributes(managed) :: rho,cpp,kappa
-    attributes(managed) :: u,v,w
-    attributes(managed) :: tmp,dtmpdtrk,dtmpdtrkold
-    integer             :: istat
-#endif
+    !@cuf attributes(managed) :: rho, cpp, kappa, u, v, w, tmp, dtmpdtrk, dtmpdtrkold
     !
     factor1 = dt*(1._rp+0.5_rp*(dt/dto))
     factor2 = dt*(     -0.5_rp*(dt/dto))
@@ -75,7 +68,6 @@ module mod_rks
     enddo
 #if defined(_OPENACC)
     !$acc end kernels 
-    !@cuf istat=cudaDeviceSynchronize()
 #else
     !$OMP END PARALLEL DO
 #endif
@@ -98,7 +90,6 @@ module mod_rks
     enddo
 #if defined(_OPENACC)
     !$acc end kernels 
-    !@cuf istat=cudaDeviceSynchronize()
 #else
     !$OMP END PARALLEL DO
 #endif

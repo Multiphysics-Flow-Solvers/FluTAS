@@ -48,6 +48,7 @@ module mod_param
   real(rp) :: bulk_velx,bulk_vely,bulk_velz
   logical , dimension(3) :: is_forced
   logical , dimension(0:1,3) :: is_outflow
+  logical :: exists
   !
   integer , dimension(3) :: ng
   integer , dimension(3) :: n
@@ -89,6 +90,10 @@ module mod_param
 #endif
   character(len=1), dimension(0:1,3) :: cbctmp
   real(rp)        , dimension(0:1,3) ::  bctmp
+#endif
+#if defined(_USE_VOF) && (_DO_POSTPROC) 
+  logical :: do_tagging
+  integer :: iout0d_ta
 #endif
   !
   contains
@@ -187,7 +192,7 @@ module mod_param
     !  
     ! load post-processing input files
     !
-#if defined(_DO_POSTPROC)
+#if defined(_HEAT_TRANSFER) && defined(_DO_POSTPROC)
     open(newunit=iunit,file='post.in',status='old',action='read',iostat=ierr)
     if( ierr.eq.0 ) then
       read(iunit,*) do_avg
@@ -201,6 +206,24 @@ module mod_param
       if(myid.eq.0) print*, 'Aborting...'
       call MPI_FINALIZE(ierr)
       call exit
+    endif
+    close(iunit)
+#endif
+#if defined(_USE_VOF) && defined(_DO_POSTPROC)
+    inquire(file='post_vof.in',exist=exists)
+    if(exists) then
+      open(newunit=iunit,file='post_vof.in',status='old',action='read',iostat=ierr)
+      if( ierr.eq.0 ) then
+        read(iunit,*) do_tagging,iout0d_ta
+      else
+        if(myid.eq.0) print*, 'Error reading the post_vof.in input file' 
+        if(myid.eq.0) print*, 'Aborting...'
+        call MPI_FINALIZE(ierr)
+        call exit
+      endif
+    else
+      do_tagging = .false.
+      iout0d_ta  = 1
     endif
     close(iunit)
 #endif

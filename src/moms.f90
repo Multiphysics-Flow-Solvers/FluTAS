@@ -8,12 +8,7 @@ module mod_moms
   use mod_param     , only: cp1,cv1
   use mod_types
   use mpi
-#if defined(_OPENACC)
-  use cudafor
-#endif
-#if defined(_USE_NVTX)
-  use nvtx
-#endif
+  !@cuf use cudafor
   !
   implicit none
   !
@@ -40,17 +35,12 @@ module mod_moms
     real(rp) :: kappaxp,kappaxm,kappayp,kappaym,kappazp,kappazm
     real(rp) :: rhocpci
     integer  :: qmin 
-#if defined(_OPENACC)
-    attributes(managed) :: u,v,w
-    attributes(managed) :: kappa,cp,rho
-    attributes(managed) :: s,dsdt
-    integer             :: istat
-#endif
+    !@cuf attributes(managed) :: u, v, w, kappa, cp, rho, s, dsdt
     !
     qmin = abs(lbound(u,1))
     !
-    !call weno5_old((/nx,ny,nz/),(/dxi,dyi,dzi/),qmin,.true.,s,u,v,w,dsdt)
     call weno5(nx,ny,nz,dxi,dyi,dzi,nh_u,.true.,s,u,v,w,dsdt)
+    !
 #if defined(_OPENACC)
     !$acc kernels
 #else
@@ -65,10 +55,6 @@ module mod_moms
       do j=1,ny
         do i=1,nx
           !
-#if defined(_OPENACC) && defined(_ACC_OPT) 
-          !$acc cache(kappa(i-1:i+1,j-1:j+1,k-1:k+1))
-          !$acc cache(s(i-1:i+1,j-1:j+1,k-1:k+1))
-#endif
           ip = i + 1
           im = i - 1
           jp = j + 1
@@ -104,7 +90,6 @@ module mod_moms
     enddo
 #if defined(_OPENACC)
     !$acc end kernels 
-    !@cuf istat=cudaDeviceSynchronize()
 #else
     !$OMP END PARALLEL DO
 #endif

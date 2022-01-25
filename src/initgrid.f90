@@ -13,6 +13,7 @@ module mod_initgrid
   !
   contains
   !
+  ! [NOTE] This could be done on GPU but is it worth it?
   subroutine initgrid(inivel,n,gr,lz,nh_d,dzc,dzf,zc,zf)
     !
     ! initializes the non-uniform grid in z

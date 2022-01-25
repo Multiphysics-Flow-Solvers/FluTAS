@@ -46,6 +46,7 @@ module mod_initflow
     real(rp)        , intent(in ), dimension(1-nh_d:)                 :: zclzi,dzclzi,dzflzi
     real(rp)        , intent(out), dimension(1-nh_u:,1-nh_u:,1-nh_u:) :: u,v,w
     real(rp)        , intent(out), dimension(1-nh_p:,1-nh_p:,1-nh_p:) :: p
+    !@cuf attributes(managed) :: u, v, w, p, zclzi, dzclzi, dzflzi
     !
 #if defined(_TURB_FORCING)
     real(rp) :: add_sin,add_cos
@@ -56,9 +57,6 @@ module mod_initflow
     integer  :: i,j,k
     logical  :: is_noise,is_mean
     real(rp) :: norm = 1._rp
-#if defined(_OPENACC)
-    integer :: istat
-#endif
     !
     allocate(u1d(nz))
     ! TODO: prefetch/move on GPU async
@@ -97,7 +95,6 @@ module mod_initflow
         enddo
       enddo
       !$acc end kernels
-      !@cuf istat=cudaDeviceSynchronize()
       u1d(:) = 0._rp
     case('uni')
       u1d(:) = 1._rp
@@ -138,7 +135,6 @@ module mod_initflow
         enddo
       enddo
       !$acc end kernels
-      !@cuf istat=cudaDeviceSynchronize()
     case('abc')
       if(add_noise_abc) then
         add_sin = 0.5_rp ! to promote transition when Re_abc is close to the critical value
@@ -167,7 +163,6 @@ module mod_initflow
         enddo
       enddo
       !$acc end kernels
-      !@cuf istat=cudaDeviceSynchronize()
 #endif
     case default
       if(myid.eq.0) print*, 'ERROR: invalid name for initial velocity field'
@@ -192,7 +187,6 @@ module mod_initflow
         enddo
       enddo
       !$acc end kernels
-      !@cuf istat=cudaDeviceSynchronize()
     endif
     !
     if(is_mean) then
@@ -210,7 +204,6 @@ module mod_initflow
         !
         ! see Henningson and Kim, JFM 1991
         !
-        !!$acc kernels
         do k=1,nz
           do j=1,ny
             do i=1,nx
@@ -259,7 +252,6 @@ module mod_initflow
        call exit()
       endif
       !!$acc end kernels
-      !@cuf istat=cudaDeviceSynchronize()
     endif
     deallocate(u1d)
     !
@@ -479,7 +471,6 @@ module mod_initflow
     real(rp) :: rn
     integer  :: nxg,nyg,nzg
     integer  :: i,j,k,ii,jj,kk
-    integer  :: istat
     !
     attributes(managed):: p
     !
@@ -509,7 +500,6 @@ module mod_initflow
       enddo
     enddo
     !$acc end parallel
-    !@cuf istat=cudaDeviceSynchronize()
     !
     return
   end subroutine add_noise_cuda

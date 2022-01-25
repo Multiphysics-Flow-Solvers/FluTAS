@@ -7,7 +7,6 @@ module mod_initmpi
   use decomp_2d
 #if defined(_OPENACC)
   use mod_common_mpi, only: mydev
-  use cudafor
   use mod_common_mpi, only: xsl_buf, xrl_buf, xsr_buf, xrr_buf, &
                             ysr_buf, yrr_buf, ysl_buf, yrl_buf, &
                             zsr_buf, zrr_buf, zsl_buf, zrl_buf
@@ -17,6 +16,7 @@ module mod_initmpi
   use mod_common_mpi, only: ijk_start,ijk_start_x,ijk_start_y,ijk_start_z, &
                             n_x,n_y,n_z,ipencil
   use mod_types
+  !@cuf use cudafor
   !
   implicit none
   !
@@ -48,18 +48,19 @@ module mod_initmpi
     integer :: dev,local_rank,local_comm,istat
 #endif
     !
+    ! [NOTE] I think it is much better if this is entirely controlled externally 
+    !        by masking GPU devices using CUDA_VISIBLE_DEVICES   
 #if defined(_OPENACC)
     ! 
     !  assign a different GPU to each MPI rank
     !  note: all the memory allocation should be dynamic, otherwise all the arrays
     !  will be allocated on device 0
     !
-    mydev = 0
     call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, &
          MPI_INFO_NULL, local_comm, ierr)
     call MPI_Comm_rank(local_comm, mydev, ierr)
     ierr = cudaSetDevice(mydev)
-    print*, " MPI rank", mydev, " using GPU", mydev
+    print *, " MPI rank", mydev, " using GPU", mydev
     !
 #endif
     !
@@ -206,7 +207,8 @@ module mod_initmpi
     allocate( zrr_buf( 1-nh:n(1)+nh, 1-nh:n(2)+nh ) )
 #endif
     !
-    ! TODO: wrap those in a high-level module
+    ! [TODO]: wrap those in a high-level module
+    ! [TODO]: to review how effective these API are
     !
 #if defined(_OPENACC) && !defined(_GPU_MPI)
     !

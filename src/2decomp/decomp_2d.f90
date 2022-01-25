@@ -18,7 +18,7 @@ module decomp_2d
   use cudafor
 #endif
 #if defined(_USE_NVTX_FFT)
-  use nvtx
+  use profiler
 #endif
   implicit none
 

@@ -5,14 +5,12 @@ module mod_bound
   !
   use mpi
   use mod_types
-#if defined(_USE_NVTX)
-  use nvtx
-#endif
+  !@cuf use cudafor
   !
   implicit none
   !
   private
-  public  :: bounduvw,boundp,updt_rhs_b
+  public  :: bounduvw, boundp, updt_rhs_b
   !
   contains
   !
@@ -39,9 +37,7 @@ module mod_bound
     real(rp) :: dx,dy,dz
     integer  :: q,idir,sgn,ioutflowdir,qmin
     integer  :: ind1,ind2
-#if defined(_OPENACC)    
-    attributes(managed) :: u, v, w
-#endif
+    !@cuf attributes(managed) :: u, v, w, dzc, dzf
     !
     dx = dl(1)
     dy = dl(2)
@@ -168,7 +164,7 @@ module mod_bound
     real(rp), dimension(0:nh_p-1) :: dr
     integer :: q,qmin
     integer :: ind1,ind2
-    !@cuf attributes(managed) :: p
+    !@cuf attributes(managed) :: p, dzc, dzf
     !
     qmin = abs(1-nh_p)
     !
@@ -230,7 +226,6 @@ module mod_bound
   !
   subroutine set_bc(nx,ny,nz,ctype,ibound,idir,centered,rvalue,qq_d,nh_p,dr,p)
     !
-    !@cuf use cudafor
     ! note: to be generalized with non-homogeneous Neumann
     !
     implicit none
@@ -245,13 +240,9 @@ module mod_bound
     real(rp)        , intent(inout), dimension(1-nh_p:,1-nh_p:,1-nh_p:) :: p
     !
     real(rp), dimension(0:qq_d) :: factor
-    ! NOTE: factor should be 
-    real(rp) :: sgn
+    real(rp) :: factor_value, sgn
     integer  :: i,j,k,q
-#if defined(_OPENACC)
-    integer :: istat
-    attributes(managed) :: p, factor
-#endif
+    !@cuf attributes(managed) :: p
     !
     do q=0,qq_d
       factor(q) = rvalue
@@ -284,7 +275,7 @@ module mod_bound
         !$OMP PARALLEL DO DEFAULT(none) &
         !$OMP PRIVATE(j,k,q,factor,sgn) &
         !$OMP SHARED(ny,nz,nh_p,p)
-        !$acc kernels
+        !$acc parallel loop collapse(3)
         do k=1-nh_p,nz+nh_p
           do j=1-nh_p,ny+nh_p
             do q=0,nh_p-1
@@ -293,12 +284,13 @@ module mod_bound
             enddo
           enddo
         enddo
-        !$acc end kernels
+        !$acc end parallel loop
+        !$OMP END PARALLEL DO
       case(2)
         !$OMP PARALLEL DO DEFAULT(none) &
         !$OMP PRIVATE(i,k,q,factor,sgn) &
         !$OMP SHARED(nx,nz,nh_p,p)
-        !$acc kernels
+        !$acc parallel loop collapse(3)
         do k=1-nh_p,nz+nh_p
           do q=0,nh_p-1
             do i=1-nh_p,nx+nh_p
@@ -307,12 +299,13 @@ module mod_bound
             enddo
           enddo
         enddo
-        !$acc end kernels
+        !$acc end parallel loop
+        !$OMP END PARALLEL DO
       case(3)
         !$OMP PARALLEL DO DEFAULT(none) &
         !$OMP PRIVATE(i,j,q,factor,sgn) &
         !$OMP SHARED(nx,ny,nz,nh_p,p)
-        !$acc kernels
+        !$acc parallel loop collapse(3)
         do q=0,nh_p-1
           do j=1-nh_p,ny+nh_p
             do i=1-nh_p,nx+nh_p
@@ -321,7 +314,7 @@ module mod_bound
             enddo
           enddo
         enddo
-        !$acc end kernels
+        !$acc end parallel loop
         !$OMP END PARALLEL DO
       end select
     case('D','N')
@@ -332,29 +325,33 @@ module mod_bound
             !$OMP PARALLEL DO DEFAULT(none) &
             !$OMP PRIVATE(j,k,q,factor,sgn) &
             !$OMP SHARED(ny,nz,nh_p,p)
-            !$acc kernels
-            do k=1-nh_p,nz+nh_p
-              do j=1-nh_p,ny+nh_p
-                do q=0,nh_p-1
-                  p(0-q,j,k) = factor(q)+sgn*p(1+q,j,k)
+            do q=0,nh_p-1
+              factor_value = factor(q)
+              !
+              !$acc parallel loop collapse(2)
+              do k=1-nh_p,nz+nh_p
+                do j=1-nh_p,ny+nh_p
+                  p(0-q,j,k) = factor_value+sgn*p(1+q,j,k)
                 enddo
               enddo
+              !$acc end parallel loop
             enddo
-            !$acc end kernels
             !$OMP END PARALLEL DO
           elseif(ibound.eq.1) then
             !$OMP PARALLEL DO DEFAULT(none) &
             !$OMP PRIVATE(j,k,q,factor,sgn) &
             !$OMP SHARED(nx,ny,nz,nh_p,p)
-            !$acc kernels
-            do k=1-nh_p,nz+nh_p
-              do j=1-nh_p,ny+nh_p
-                do q=0,nh_p-1
-                  p(nx+1+q,j,k) = factor(q)+sgn*p(nx-q,j,k)
+            do q=0,nh_p-1
+              factor_value = factor(q)
+              !
+              !$acc parallel loop collapse(2)
+              do k=1-nh_p,nz+nh_p
+                do j=1-nh_p,ny+nh_p
+                  p(nx+1+q,j,k) = factor_value+sgn*p(nx-q,j,k)
                 enddo
               enddo
+              !$acc end parallel loop
             enddo
-            !$acc end kernels
             !$OMP END PARALLEL DO
           endif
         case(2)
@@ -362,29 +359,33 @@ module mod_bound
             !$OMP PARALLEL DO DEFAULT(none) &
             !$OMP PRIVATE(i,k,q,factor,sgn) &
             !$OMP SHARED(nx,nz,nh_p,p)
-            !$acc kernels
-            do k=1-nh_p,nz+nh_p
-              do q=0,nh_p-1
+            do q=0,nh_p-1
+              factor_value = factor(q)
+              !
+              !$acc parallel loop collapse(2)
+              do k=1-nh_p,nz+nh_p
                 do i=1-nh_p,nx+nh_p
-                  p(i,0-q  ,k) = factor(q)+sgn*p(i,1+q,k)
+                  p(i,0-q  ,k) = factor_value+sgn*p(i,1+q,k)
                 enddo
               enddo
+              !$acc end parallel loop
             enddo
-            !$acc end kernels
             !$OMP END PARALLEL DO
           elseif(ibound.eq.1) then
             !$OMP PARALLEL DO DEFAULT(none) &
             !$OMP PRIVATE(i,k,q,factor,sgn) &
             !$OMP SHARED(nx,ny,nz,nh_p,p)
-            !$acc kernels
-            do k=1-nh_p,nz+nh_p
-              do q=0,nh_p-1
+            do q=0,nh_p-1
+              factor_value = factor(q)
+              !
+              !$acc parallel loop collapse(2)
+              do k=1-nh_p,nz+nh_p
                 do i=1-nh_p,nx+nh_p
-                  p(i,ny+1+q,k) = factor(q)+sgn*p(i,ny-q,k)
+                  p(i,ny+1+q,k) = factor_value+sgn*p(i,ny-q,k)
                 enddo
               enddo 
+              !$acc end parallel loop
             enddo
-            !$acc end kernels
             !$OMP END PARALLEL DO
           endif
         case(3)
@@ -392,29 +393,33 @@ module mod_bound
             !$OMP PARALLEL DO DEFAULT(none) &
             !$OMP PRIVATE(i,j,q,factor,sgn) &
             !$OMP SHARED(nx,ny,nh_p,p)
-            !$acc kernels
             do q=0,nh_p-1
+              factor_value = factor(q)
+              !
+              !$acc parallel loop collapse(2)
               do j=1-nh_p,ny+nh_p
                 do i=1-nh_p,nx+nh_p
-                  p(i,j,0-q ) = factor(q)+sgn*p(i,j,1+q)
+                  p(i,j,0-q ) = factor_value+sgn*p(i,j,1+q)
                 enddo 
               enddo
+              !$acc end parallel loop
             enddo
-            !$acc end kernels
             !$OMP END PARALLEL DO
           elseif(ibound.eq.1) then
             !$OMP PARALLEL DO DEFAULT(none) &
             !$OMP PRIVATE(i,j,q,factor,sgn) &
             !$OMP SHARED(nx,ny,nz,nh_p,p)
-            !$acc kernels
             do q=0,nh_p-1
+              factor_value = factor(q)
+              !
+              !$acc parallel loop collapse(2)
               do j=1-nh_p,ny+nh_p
                 do i=1-nh_p,nx+nh_p
-                  p(i,j,nz+1+q) = factor(q)+sgn*p(i,j,nz-q)
+                  p(i,j,nz+1+q) = factor_value+sgn*p(i,j,nz-q)
                 enddo
               enddo
+              !$acc end parallel loop
             enddo
-            !$acc end kernels
             !$OMP END PARALLEL DO
           endif
         end select
@@ -425,30 +430,34 @@ module mod_bound
             !$OMP PARALLEL DO DEFAULT(none) &
             !$OMP PRIVATE(j,k,q,factor,sgn) &
             !$OMP SHARED(ny,nz,nh_p,p)
-            !$acc kernels
-            do k=1-nh_p,nz+nh_p
-              do j=1-nh_p,ny+nh_p
-                do q=0,nh_p-1
-                  p(0-q,j,k) = factor(q) 
+            do q=0,nh_p-1
+              factor_value = factor(q)
+              !
+              !$acc parallel loop collapse(2)
+              do k=1-nh_p,nz+nh_p
+                do j=1-nh_p,ny+nh_p
+                  p(0-q,j,k) = factor_value
                 enddo
               enddo
+              !$acc end parallel loop
             enddo
-            !$acc end kernels
             !$OMP END PARALLEL DO
           elseif(ibound.eq.1) then
             !$OMP PARALLEL DO DEFAULT(none) &
             !$OMP PRIVATE(j,k,q,factor,sgn) &
             !$OMP SHARED(nx,ny,nz,nh_p,p)
-            !$acc kernels
-            do k=1-nh_p,nz+nh_p
-              do j=1-nh_p,ny+nh_p
-                do q=0,nh_p-1
-                  p(nx+q  ,j,k) = factor(q)
+            do q=0,nh_p-1
+              factor_value = factor(q)
+              !
+              !$acc parallel loop collapse(2)
+              do k=1-nh_p,nz+nh_p
+                do j=1-nh_p,ny+nh_p
+                  p(nx+q  ,j,k) = factor_value
                   p(nx+1+q,j,k) = p(nx-1-q,j,k)
                 enddo
               enddo
+              !$acc end parallel loop
             enddo
-            !$acc end kernels
             !$OMP END PARALLEL DO
           endif
         case(2)
@@ -456,30 +465,34 @@ module mod_bound
             !$OMP PARALLEL DO DEFAULT(none) &
             !$OMP PRIVATE(i,k,q,factor,sgn) &
             !$OMP SHARED(nx,nz,nh_p,p)
-            !$acc kernels
-            do k=1-nh_p,nz+nh_p
-              do q=0,nh_p-1
+            do q=0,nh_p-1
+              factor_value = factor(q)
+              !
+              !$acc parallel loop collapse(2)
+              do k=1-nh_p,nz+nh_p
                 do i=1-nh_p,nx+nh_p
-                  p(i,0-q,k) = factor(q) 
+                  p(i,0-q,k) = factor_value
                 enddo
               enddo
+              !$acc end parallel loop
             enddo
-            !$acc end kernels
             !$OMP END PARALLEL DO
           elseif(ibound.eq.1) then
             !$OMP PARALLEL DO DEFAULT(none) &
             !$OMP PRIVATE(i,j,q,factor,sgn) &
             !$OMP SHARED(nx,ny,nz,nh_p,p)
-            !$acc kernels
-            do k=1-nh_p,nz+nh_p
-              do q=0,nh_p-1
+            do q=0,nh_p-1
+              factor_value = factor(q)
+              !
+              !$acc parallel loop collapse(2)
+              do k=1-nh_p,nz+nh_p
                 do i=1-nh_p,nx+nh_p
-                  p(i,ny+q  ,k) = factor(q)
+                  p(i,ny+q  ,k) = factor_value
                   p(i,ny+1+q,k) = p(i,ny-1-q,k)
                 enddo
               enddo
+              !$acc end parallel loop
             enddo
-            !$acc end kernels
             !$OMP END PARALLEL DO
           endif
         case(3)
@@ -487,30 +500,34 @@ module mod_bound
             !$OMP PARALLEL DO DEFAULT(none) &
             !$OMP PRIVATE(i,j,q,factor,sgn) &
             !$OMP SHARED(nx,ny,nh_p,p)
-            !$acc kernels
             do q=0,nh_p-1
+              factor_value = factor(q)
+              !
+              !$acc parallel loop collapse(2)
               do j=1-nh_p,ny+nh_p
                 do i=1-nh_p,nx+nh_p
-                  p(i,j,0-q) = factor(q) 
+                  p(i,j,0-q) = factor_value 
                 enddo
               enddo
+              !$acc end parallel loop
             enddo
-            !$acc end kernels
             !$OMP END PARALLEL DO
           elseif(ibound.eq.1) then
             !$OMP PARALLEL DO DEFAULT(none) &
             !$OMP PRIVATE(i,j,q,factor,sgn) &
             !$OMP SHARED(nx,ny,nz,nh_p,p)
-            !$acc kernels
             do q=0,nh_p-1
+              factor_value = factor(q)
+              !
+              !$acc parallel loop collapse(2)
               do j=1-nh_p,ny+nh_p
                 do i=1-nh_p,nx+nh_p
-                  p(i,j,nz+q  ) = factor(q)
+                  p(i,j,nz+q  ) = factor_value
                   p(i,j,nz+1+q) = p(i,j,nz-1-q)
                 enddo
               enddo
+              !$acc end parallel loop
             enddo
-            !$acc end kernels
             !$OMP END PARALLEL DO
           endif
         end select
@@ -521,30 +538,34 @@ module mod_bound
             !$OMP PARALLEL DO DEFAULT(none) &
             !$OMP PRIVATE(j,k,q,factor,sgn) &
             !$OMP SHARED(ny,nz,nh_p,p)
-            !$acc kernels
-            do k=1-nh_p,nz+nh_p
-              do j=1-nh_p,ny+nh_p
-                do q=0,nh_p-1
-                  p(0-q,j,k) = 1.0_rp*factor(q) + p(1+q,j,k)
+            do q=0,nh_p-1
+              factor_value = factor(q)
+              !
+              !$acc parallel loop collapse(2)
+              do k=1-nh_p,nz+nh_p
+                do j=1-nh_p,ny+nh_p
+                  p(0-q,j,k) = 1.0_rp*factor_value + p(1+q,j,k)
                 enddo
               enddo
+              !$acc end parallel loop
             enddo
-            !$acc end kernels
             !$OMP END PARALLEL DO
           elseif(ibound.eq.1) then
             !$OMP PARALLEL DO DEFAULT(none) &
             !$OMP PRIVATE(j,k,q,factor,sgn) &
             !$OMP SHARED(nx,ny,nz,nh_p,p)
-            !$acc kernels
-            do k=1-nh_p,nz+nh_p
-              do j=1-nh_p,ny+nh_p
-                do q=0,nh_p-1
-                  p(nx+q  ,j,k) = 1.0_rp*factor(q) + p(nx-1-q,j,k)
-                  p(nx+1+q,j,k) = 2.0_rp*factor(q) + p(nx-1-q,j,k)
+            do q=0,nh_p-1
+              factor_value = factor(q)
+              !
+              !$acc parallel loop collapse(2)
+              do k=1-nh_p,nz+nh_p
+                do j=1-nh_p,ny+nh_p
+                  p(nx+q  ,j,k) = 1.0_rp*factor_value + p(nx-1-q,j,k)
+                  p(nx+1+q,j,k) = 2.0_rp*factor_value + p(nx-1-q,j,k)
                 enddo
               enddo
+              !$acc end parallel loop
             enddo
-            !$acc end kernels
             !$OMP END PARALLEL DO
           endif
         case(2)
@@ -552,30 +573,34 @@ module mod_bound
             !$OMP PARALLEL DO DEFAULT(none) &
             !$OMP PRIVATE(i,k,q,factor,sgn) &
             !$OMP SHARED(nx,nz,nh_p,p)
-            !$acc kernels
-            do k=1-nh_p,nz+nh_p
-              do q=0,nh_p-1
+            do q=0,nh_p-1
+              factor_value = factor(q)
+              !
+              !$acc parallel loop collapse(2)
+              do k=1-nh_p,nz+nh_p
                 do i=1-nh_p,nx+nh_p
-                  p(i,0-q  ,k) = 1.0_rp*factor(q) + p(i,1+q  ,k) 
+                  p(i,0-q  ,k) = 1.0_rp*factor_value + p(i,1+q  ,k) 
                 enddo
               enddo
+              !$acc end parallel loop
             enddo
-            !$acc end kernels
             !$OMP END PARALLEL DO
           elseif(ibound.eq.1) then
             !$OMP PARALLEL DO DEFAULT(none) &
             !$OMP PRIVATE(i,k,q,factor,sgn) &
             !$OMP SHARED(nx,ny,nz,nh_p,p)
-            !$acc kernels
-            do k=1-nh_p,nz+nh_p
-              do q=0,nh_p-1
+            do q=0,nh_p-1
+              factor_value = factor(q)
+              !
+              !$acc parallel loop collapse(2)
+              do k=1-nh_p,nz+nh_p
                 do i=1-nh_p,nx+nh_p
-                  p(i,ny+q  ,k) = 1.0_rp*factor(q) + p(i,ny-1-q,k)
-                  p(i,ny+1+q,k) = 2.0_rp*factor(q) + p(i,ny-1-q,k)
+                  p(i,ny+q  ,k) = 1.0_rp*factor_value + p(i,ny-1-q,k)
+                  p(i,ny+1+q,k) = 2.0_rp*factor_value + p(i,ny-1-q,k)
                 enddo
               enddo
+              !$acc end parallel loop
             enddo
-            !$acc end kernels
             !$OMP END PARALLEL DO
           endif
         case(3)
@@ -583,41 +608,40 @@ module mod_bound
             !$OMP PARALLEL DO DEFAULT(none) &
             !$OMP PRIVATE(i,j,q,factor,sgn) &
             !$OMP SHARED(nx,ny,nh_p,p)
-            !$acc kernels
             do q=0,nh_p-1
+              factor_value = factor(q)
+              !
+              !$acc parallel loop collapse(2)
               do j=1-nh_p,ny+nh_p
                 do i=1-nh_p,nx+nh_p
-                  p(i,j,0-q  ) = 1.0_rp*factor(q) + p(i,j,1+q  )
+                  p(i,j,0-q  ) = 1.0_rp*factor_value + p(i,j,1+q  )
                 enddo
               enddo
+              !$acc end parallel loop
             enddo
-            !$acc end kernels
             !$OMP END PARALLEL DO
           elseif(ibound.eq.1) then
             !$OMP PARALLEL DO DEFAULT(none) &
             !$OMP PRIVATE(i,j,q,factor,sgn) &
             !$OMP SHARED(nx,ny,nz,nh_p,p)
-            !$acc kernels
             do q=0,nh_p-1
+              factor_value = factor(q)
+              !
+              !$acc parallel loop collapse(2)
               do j=1-nh_p,ny+nh_p
                 do i=1-nh_p,nx+nh_p
-                  p(i,j,nz+q  ) = 1.0_rp*factor(q) + p(i,j,nz-1-q)
-                  p(i,j,nz+1+q) = 2.0_rp*factor(q) + p(i,j,nz-1-q)
+                  p(i,j,nz+q  ) = 1.0_rp*factor_value + p(i,j,nz-1-q)
+                  p(i,j,nz+1+q) = 2.0_rp*factor_value + p(i,j,nz-1-q)
                 enddo
               enddo
+              !$acc end parallel loop
             enddo
-            !$acc end kernels
             !$OMP END PARALLEL DO
           endif
         end select
       endif
     end select
     !
-    ! n.b. need to add this sync for pre-Pascal cards
-    !      since a managed variable will be touched
-    !      on the host memory before synchronization
-    ! 
-    !@cuf istat=cudaDeviceSynchronize()
     return
   end subroutine set_bc
   !
@@ -815,16 +839,16 @@ module mod_bound
     real(rp)        , intent(in   ), dimension(      :,      :,     0:) :: rhsbx,rhsby,rhsbz
     real(rp)        , intent(inout), dimension(1-nh_p:,1-nh_p:,1-nh_p:) :: p
     !
-    integer, dimension(3) :: q
+    integer :: q1, q2, q3
     integer :: i,j,k,idir
-#if defined(_OPENACC)
     !@cuf attributes(managed) :: p, rhsbx, rhsby, rhsbz
-#endif
     !
-    q(:) = 0
-    do idir = 1,3
-      if(c_or_f(idir).eq.'f'.and.cbc(1,idir).eq.'D') q(idir) = 1
-    enddo
+    q1 = 0
+    q2 = 0
+    q3 = 0
+    if(c_or_f(1).eq.'f'.and.cbc(1,1).eq.'D') q1 = 1
+    if(c_or_f(2).eq.'f'.and.cbc(1,2).eq.'D') q2 = 1
+    if(c_or_f(3).eq.'f'.and.cbc(1,3).eq.'D') q3 = 1
     !
     ! along x
     !
@@ -849,7 +873,7 @@ module mod_bound
       !$acc kernels
       do k=1,nz
         do j=1,ny
-          p(nx-q(1),j,k) = p(nx-q(1),j,k) + rhsbx(j,k,1)
+          p(nx-q1,j,k) = p(nx-q1,j,k) + rhsbx(j,k,1)
         enddo
       enddo
       !$acc end kernels
@@ -879,7 +903,7 @@ module mod_bound
       !$acc kernels
       do k=1,nz
         do i=1,nx
-          p(i,ny-q(2),k) = p(i,ny-q(2),k) + rhsby(i,k,1)
+          p(i,ny-q2,k) = p(i,ny-q2,k) + rhsby(i,k,1)
         enddo
       enddo
       !$acc end kernels
@@ -909,7 +933,7 @@ module mod_bound
       !$acc kernels
       do j=1,ny
         do i=1,nx
-          p(i,j,nz-q(3)) = p(i,j,nz-q(3)) + rhsbz(i,j,1)
+          p(i,j,nz-q3) = p(i,j,nz-q3) + rhsbz(i,j,1)
         enddo
       enddo
       !$acc end kernels
@@ -921,7 +945,6 @@ module mod_bound
   !
   subroutine updthalo(nx,ny,nz,nh,halo,idir,p)
     !
-    !@cuf use cudafor
 #if defined(_OPENACC)
     use mod_common_mpi, only: xsl_buf, xrl_buf, xsr_buf, xrr_buf, &
                               ysr_buf, yrr_buf, ysl_buf, yrl_buf, &
@@ -935,29 +958,25 @@ module mod_bound
     integer , intent(in   )                               :: nx,ny,nz
     integer , intent(in   )                               :: nh,halo,idir
     real(rp), intent(inout), dimension(1-nh:,1-nh:,1-nh:) :: p
-#if defined(_OPENACC)
-    attributes(managed) :: p
-    integer :: istat
-#endif
+    !@cuf attributes(managed) :: p
     integer :: i,j,k, q, lb1, lb2
     !integer :: requests(4), statuses(MPI_STATUS_SIZE,4)
     !
     !  this subroutine updates the halos that store info
     !  from the neighboring computational sub-domain
     !
-#if defined(_USE_NVTX)
-    call nvtxStartRange("updthalo", 1)
-#endif
     select case(idir)
     case(1) ! x direction
 #if defined(_OPENACC)
+      !$acc kernels present(xsl_buf,xrl_buf,xsr_buf,xrr_buf)
       xsl_buf(:,:) = - huge(1._rp)
       xrl_buf(:,:) = - huge(1._rp)
       xsr_buf(:,:) = - huge(1._rp)
       xrr_buf(:,:) = - huge(1._rp)
+      !$acc end kernels
       !
       do q=0,nh-1
-        !$acc kernels
+        !$acc kernels present(xsl_buf,xsr_buf)
         do k=1-nh,nz+nh
           do j=1-nh,ny+nh
             xsl_buf(j,k) = p(1+q ,j,k)
@@ -965,7 +984,6 @@ module mod_bound
           enddo
         enddo
         !$acc end kernels
-        !@cuf istat = cudaDeviceSynchronize()
         !
         lb1 = lbound(xsl_buf,1) 
         lb2 = lbound(xsl_buf,2) 
@@ -975,7 +993,8 @@ module mod_bound
         call MPI_SENDRECV(xsr_buf(lb1,lb2), size( xsr_buf ),MPI_REAL_RP,right,0, &
                           xrl_buf(lb1,lb2), size( xrl_buf ),MPI_REAL_RP,left ,0, &
                           comm_cart,status,ierr)
-        !$acc kernels                  
+        !
+        !$acc kernels present(xrl_buf,xrr_buf)                  
         do k=1-nh,nz+nh
           do j=1-nh,ny+nh
             p(nx+1+q  ,j,k) = xrr_buf(j,k)
@@ -983,7 +1002,6 @@ module mod_bound
           enddo
         enddo
         !$acc end kernels
-        !@cuf istat = cudaDeviceSynchronize()
       enddo
 #else
       call MPI_SENDRECV(p(1      ,1-nh,1-nh),1,halo,left ,0, &
@@ -995,13 +1013,15 @@ module mod_bound
 #endif
     case(2) ! y direction
 #if defined(_OPENACC)
+      !$acc kernels present(ysl_buf,yrl_buf,ysr_buf,yrr_buf)
       ysl_buf(:,:) = - huge(1._rp)
       yrl_buf(:,:) = - huge(1._rp)
       ysr_buf(:,:) = - huge(1._rp)
       yrr_buf(:,:) = - huge(1._rp)
+     !$acc end kernels
       !
       do q=0,nh-1
-        !$acc kernels
+        !$acc kernels present(ysl_buf,ysr_buf)
         do k=1-nh,nz+nh 
           do i=1-nh,nx+nh
             ysl_buf(i,k) = p(i, 1+q,k)
@@ -1009,7 +1029,6 @@ module mod_bound
           enddo
         enddo
         !$acc end kernels
-        !@cuf istat = cudaDeviceSynchronize()
         !
         lb1 = lbound(ysl_buf,1) 
         lb2 = lbound(ysl_buf,2) 
@@ -1019,7 +1038,8 @@ module mod_bound
         call MPI_SENDRECV(ysr_buf(lb1,lb2), size( ysr_buf ),MPI_REAL_RP,back ,0, &
                           yrl_buf(lb1,lb2), size( yrl_buf ),MPI_REAL_RP,front,0, &
                           comm_cart,status,ierr)
-        !$acc kernels                  
+        !
+        !$acc kernels present(yrr_buf,yrl_buf)
         do k=1-nh,nz+nh 
           do i=1-nh,nx+nh
             p(i,ny+1+q,k) = yrr_buf(i,k)
@@ -1027,7 +1047,6 @@ module mod_bound
           enddo
         enddo
         !$acc end kernels
-        !@cuf istat = cudaDeviceSynchronize()
       enddo
 #else
       call MPI_SENDRECV(p(1-nh,1      ,1-nh),1,halo,front,0, &
@@ -1039,13 +1058,15 @@ module mod_bound
 #endif
     case(3) ! z direction
 #if defined(_OPENACC)
+      !$acc kernels present(zsl_buf,zrl_buf,zsr_buf,zrr_buf)
       zsl_buf(:,:) = - huge(1._rp)
       zrl_buf(:,:) = - huge(1._rp)
       zsr_buf(:,:) = - huge(1._rp)
       zrr_buf(:,:) = - huge(1._rp)
+      !$acc end kernels
       !
       do q=0,nh-1
-        !$acc kernels
+        !$acc kernels present(zsl_buf,zsr_buf)
         do j=1-nh,ny+nh 
           do i=1-nh,nx+nh
             zsl_buf(i,j) = p(i,j,  1+q)
@@ -1053,7 +1074,6 @@ module mod_bound
           enddo
         enddo
         !$acc end kernels
-        !@cuf istat = cudaDeviceSynchronize()
         !
         lb1 = lbound(zsl_buf,1) 
         lb2 = lbound(zsl_buf,2) 
@@ -1063,7 +1083,8 @@ module mod_bound
         call MPI_SENDRECV(zsr_buf(lb1,lb2), size( zsr_buf ),MPI_REAL_RP,top   ,0, &
                           zrl_buf(lb1,lb2), size( zrl_buf ),MPI_REAL_RP,bottom,0, &
                           comm_cart,status,ierr)
-        !$acc kernels                  
+        !
+        !$acc kernels present(zrr_buf,zrl_buf)
         do j=1-nh,ny+nh 
           do i=1-nh,nx+nh
             p(i,j,nz+1+q) = zrr_buf(i,j)
@@ -1071,7 +1092,6 @@ module mod_bound
           enddo
         enddo
         !$acc end kernels
-        !@cuf istat = cudaDeviceSynchronize()
       enddo
 #else
      call MPI_SENDRECV(p(1-nh,1-nh   ,1   ),1,halo,bottom,0, &
@@ -1083,10 +1103,9 @@ module mod_bound
 #endif
     !
     end select
-#if defined(_USE_NVTX)
-    call nvtxEndRange
-#endif
     !
     return
+    !
   end subroutine updthalo
+  !
 end module mod_bound

@@ -8,9 +8,12 @@ module mod_fft
   use mod_fftw_param
   use mod_param     , only: pi
   use mod_types
+  !@cuf use cudafor
   !
   !$ use omp_lib
-  private
+  real(rp), allocatable, dimension(:,:,:) :: arr_tmp
+  !@cuf attributes(device) :: arr_tmp
+  !
   public  :: fftini,fftend,fft
 #if defined(_OPENACC)
   public  :: fftf_gpu,fftb_gpu,signal_processing
@@ -88,6 +91,7 @@ module mod_fft
       !istat = cufftPlan1D(cufft_plan_fwd_x,nx_x,CUFFT_FWD_TYPE,batch)
       istat = cufftCreate(cufft_plan_fwd_x)
       istat = cufftSetAutoAllocation(cufft_plan_fwd_x, 0)
+      ! Then very first time this routine is caslled it consumes a lot of time... why?
       istat = cufftMakePlanMany(cufft_plan_fwd_x, 1, nx_x, null_fptr, 1, nx_x, null_fptr, 1, nx_x, CUFFT_FWD_TYPE, batch, worksize)
       max_worksize = max(worksize, max_worksize)
       !
@@ -287,7 +291,7 @@ module mod_fft
   end subroutine find_fft
   !
 #if defined(_OPENACC)
-  subroutine posp_fftf(n, idir, arr)
+  subroutine posp_fftf(n1, n2, n3, idir, arr)
     !
     ! post-processing of a signal following a forward FFT
     ! to order the data as follows:
@@ -295,28 +299,30 @@ module mod_fft
     !
     implicit none
     !
-    integer , intent(in   ), dimension(3)     :: n    ! dimensions of input/output array
+    integer, intent(in) :: n1, n2, n3       ! dimensions of input/output array
     integer , intent(in   )                   :: idir ! direction where the transform is taken
     real(rp), intent(inout), dimension(:,:,:) :: arr  ! input/output array
     integer :: j, k, nn
-    attributes(device) :: arr
+!@cuf attributes(device) :: arr
     !
-    nn = n(idir) - 2
+    !nn = n(idir) - 2
     select case(idir)
     case(1)
-      !
-      !$cuf kernel do(2) <<<*,*>>>
-      do k=1,n(3)
-        do j=1,n(2)
+      nn = n1 - 2
+      !$acc parallel loop collapse(2) present(arr)
+      do k=1,n3
+        do j=1,n2
           arr(2,j,k) = arr(nn+1,j,k)
          enddo
       enddo
+      !$acc end parallel loop
+      !
     end select
     !
     return
   end subroutine posp_fftf
   !
-  subroutine prep_fftb(n, idir, arr)
+  subroutine prep_fftb(n1, n2, n3, idir, arr)
     !
     ! pre-processing of a signal preciding a backward FFT
     ! to order the data as follows:
@@ -325,28 +331,32 @@ module mod_fft
     !
     implicit none
     !
-    integer , intent(in   ), dimension(3)     :: n    ! dimensions of input/output array
+    integer, intent(in) :: n1, n2, n3       ! dimensions of input/output array
     integer , intent(in   )                   :: idir ! direction where the transform is taken
     real(rp), intent(inout), dimension(:,:,:) :: arr  ! input/output array
     !
     integer :: j,k,nn
-    attributes(device) :: arr
+    !@cuf attributes(device) :: arr
     !
-    nn = n(idir) - 2
+    !nn = n(idir) - 2
     select case (idir)
     case(1)
-      !$cuf kernel do(2) <<<*,*>>>
-      do k=1,n(3)
-        do j=1,n(2)
+      nn = n1 - 2
+      !$acc parallel loop collapse(2) present(arr)
+      do k=1,n3
+        do j=1,n2
           arr(nn+1,j,k) = arr(2,j,k)
           arr(2,j,k)    = 0._rp
         end do
       end do
+      !$acc end parallel loop
+      !
     end select
+    !
     return
   end subroutine prep_fftb
   !
-  subroutine prep_dctiif(n,idir,arr,is_swap_order,is_negate_even)
+  subroutine prep_dctiif(n1, n2, n3,idir,arr,is_swap_order,is_negate_even)
     !
     ! pre-processing of a signal to perform a fast forward
     ! discrete cosine transform (DCT) with FFTs (see Makhoul 1980)
@@ -365,46 +375,49 @@ module mod_fft
     !
     implicit none
     !
-    integer , intent(in   ), dimension(3)     :: n       ! dimensions of input/output array
+    integer, intent(in) :: n1, n2, n3       ! dimensions of input/output array
     integer , intent(in   )                   :: idir                  ! array direction where the transform is taken
     real(rp), intent(inout), dimension(:,:,:) :: arr ! input/output array
     logical , intent(in   )                   :: is_swap_order  ! swap order of the elements of the input array? (for DST)
     logical , intent(in   )                   :: is_negate_even ! negate every other element of the input array?
     !
-    real(rp), allocatable, dimension(:,:,:) :: arr_tmp
     integer :: i,j,k,nn,ii
-    attributes(device) :: arr
-    attributes(device) :: arr_tmp
+    !@cuf attributes(device) :: arr
     !
-    nn = n(idir)
+    !nn = n(idir)
     select case (idir)
     case(1)
-      if(.not.allocated(arr_tmp)) allocate (arr_tmp(0:n(idir)-1,n(2),n(3)))
+      nn = n1
+      if(.not.allocated(arr_tmp)) allocate (arr_tmp(0:n1-1,n2,n3))
+      !
       if(is_swap_order) then
-        !$cuf kernel do(3) <<<*,*>>>
-        do k=1,n(3)
-          do j=1,n(2)
+        !$acc parallel loop collapse(3) present(arr_tmp, arr)
+        do k=1,n3
+          do j=1,n2
             do i =1,nn
               ii =i-1
               arr_tmp(ii,j,k) = arr(i,j,k)
             end do
           end do
         end do
-        !$cuf kernel do(3) <<<*,*>>>
-        do k=1,n(3)
-          do j =1,n(2)
+        !$acc end parallel loop
+        !
+        !$acc parallel loop collapse(3) present(arr_tmp, arr)
+        do k=1,n3
+          do j =1,n2
             do i =1,nn
               ii = i-1
               arr(i,j,k) = arr_tmp(nn-1-ii,j,k)
             end do
           end do
         end do
+        !$acc end parallel loop
       end if
       !
       if(is_negate_even) then
-        !$cuf kernel do(3) <<<*,*>>>
-        do k=1,n(3)
-          do j=1,n(2)
+        !$acc parallel loop collapse(3) present(arr)
+        do k=1,n3
+          do j=1,n2
             do i=1,nn
               if(mod(i,2).eq.0) then
                 arr(i,j,k) = -arr(i,j,k)
@@ -412,12 +425,13 @@ module mod_fft
             end do
           end do
         end do
+        !$acc end parallel loop
       end if
-      
-      !$cuf kernel do(3) <<<*,*>>>
-      do k = 1, n(3)
-         do j = 1, n(2)
-            do i = 1, n(1)
+      !
+      !$acc parallel loop collapse(3) present(arr_tmp, arr)
+      do k = 1, n3
+         do j = 1, n2
+            do i = 1, n1
                ii = i - 1
                if (ii.le.(nn - 1)/2) then
                   arr_tmp(ii, j, k) = arr(2*ii + 1, j, k)
@@ -427,21 +441,25 @@ module mod_fft
             end do
          end do
       end do
-      !$cuf kernel do(3) <<<*,*>>>
-      do k = 1, n(3)
-         do j = 1, n(2)
-            do i = 1, n(1)
+      !$acc end parallel loop
+      !
+      !$acc parallel loop collapse(3) present(arr_tmp, arr)
+      do k = 1, n3
+         do j = 1, n2
+            do i = 1, n1
                ii = i - 1
                arr(i, j, k) = arr_tmp(ii, j, k)
             end do
          end do
       end do
+      !$acc end parallel loop
       !deallocate(arr_tmp)
     end select
+    !
     return
   end subroutine prep_dctiif
   !
-  subroutine posp_dctiif(n,idir,arr,is_swap_order,is_negate_even)
+  subroutine posp_dctiif(n1, n2, n3,idir,arr,is_swap_order,is_negate_even)
     !
     ! post-processing of a signal to perform a fast forward discrete
     ! cosine transform with FFTs (see Makhoul 1980)
@@ -452,90 +470,101 @@ module mod_fft
     !
     implicit none
     !
-    integer , intent(in   ), dimension(3)     :: n
+    integer, intent(in) :: n1, n2, n3       ! dimensions of input/output array
     integer , intent(in   )                   :: idir
     real(rp), intent(inout), dimension(:,:,:) :: arr
     logical , intent(in   )                   :: is_swap_order  ! swap order of the elements of the input array? (for DST)
     logical , intent(in   )                   :: is_negate_even ! negate every other element of the input array?
     !
-    real(rp), allocatable, dimension(:,:,:) :: arr_tmp
-    real(rp), allocatable, dimension(:,:)   :: arr_sincos
+!!!    real(rp), allocatable, dimension(:,:,:) :: arr_tmp
+!!!    real(rp), allocatable, dimension(:,:)   :: arr_sincos
     integer :: i, j, k, ii, nn
-    attributes(device) :: arr
-    attributes(device) :: arr_tmp
-    attributes(device) :: arr_sincos
+    !@cuf attributes(device) :: arr
     real(rp) :: arg, carg, sarg
     !
-    nn = n(idir) - 2
+    !nn = n(idir) - 2
     select case (idir)
     case(1)
-      if(.not. allocated(arr_tmp)) allocate (arr_tmp(0:n(idir) - 1, n(2), n(3)))
-      if(.not. allocated(arr_sincos)) allocate (arr_sincos(2, 0:nn/2))
-      !$cuf kernel do(1) <<<*,*>>>
-      do i = 1, nn + 2, 2
-        ii = (i - 1)/2
-        arg = -pi*ii/(2.*nn)
-        arr_sincos(1, ii) = sin(arg)
-        arr_sincos(2, ii) = cos(arg)
-      end do
-      !$cuf kernel do(3) <<<*,*>>>
-      do k=1,n(3)
-        do j=1,n(2)
+      nn = n1 - 2
+      if(.not. allocated(arr_tmp)) allocate (arr_tmp(0:n1 - 1, n2, n3))
+      !
+!!!      if(.not. allocated(arr_sincos)) allocate (arr_sincos(2, 0:nn/2))
+!!!      !$acc parallel loop collapse(1) present(arr_sincos)
+!!!      do i = 1, nn + 2, 2
+!!!         ii = (i - 1)/2
+!!!         arg = -pi*ii/(2.*nn)
+!!!         arr_sincos(1, ii) = sin(arg)
+!!!         arr_sincos(2, ii) = cos(arg)
+!!!       end do
+      !
+      !$acc parallel loop collapse(3) present(arr_tmp, arr)
+      do k=1,n3
+        do j=1,n2
            do i=1,nn+2,2 
              !
              ii = (i - 1)/2
-             !arr_tmp(ii   ,j,k) =    real( &
-             !                         2.*exp(-ri_unit*pi*ii/(2.*nn))*cmplx(arr(i,j,k),arr(i+1,j,k),rp) &
-             !                        )
-             !arr_tmp(nn-ii,j,k) = - aimag( &
-             !                         2.*exp(-ri_unit*pi*ii/(2.*nn))*cmplx(arr(i,j,k),arr(i+1,j,k),rp) &
-             !                        ) ! = 0 for ii=0
-             !arg = -pi*ii/(2.*nn)
-             !call sincos(arg,sarg,carg)
-             carg = arr_sincos(2, ii)!cos(arg)
-             sarg = arr_sincos(1, ii)!sin(arg)
+             !!! arr_tmp(ii   ,j,k) =    real( &
+             !!!                          2.*exp(-ri_unit*pi*ii/(2.*nn))*cmplx(arr(i,j,k),arr(i+1,j,k),rp) &
+             !!!                         )
+             !!! arr_tmp(nn-ii,j,k) = - aimag( &
+             !!!                          2.*exp(-ri_unit*pi*ii/(2.*nn))*cmplx(arr(i,j,k),arr(i+1,j,k),rp) &
+             !!!                         ) ! = 0 for ii=0
+             arg = -pi*ii/(2.*nn)
+             !!! call sincos(arg,sarg,carg)
+             !!! carg = arr_sincos(2, ii)!cos(arg)
+             !!! sarg = arr_sincos(1, ii)!sin(arg)
+             carg = cos(arg)
+             sarg = sin(arg)
              arr_tmp(ii, j, k) = 2.*(carg*arr(i, j, k) - sarg*arr(i + 1, j, k))
              arr_tmp(nn - ii, j, k) = -2.*(sarg*arr(i, j, k) + carg*arr(i + 1, j, k))
              !
             end do
          end do
-      end do
-      !$cuf kernel do(3) <<<*,*>>>
-      do k=1,n(3)
-        do j=1,n(2)
+      end do 
+      !$acc end parallel loop
+      !
+      !$acc parallel loop collapse(3) present(arr_tmp, arr)
+      do k=1,n3
+        do j=1,n2
           do i=1,nn
             ii = i - 1
             arr(i, j, k) = arr_tmp(ii, j, k)
           end do
         end do
       end do
+      !$acc end parallel loop
+      !
       if(is_swap_order) then
         !
-        !$cuf kernel do(3) <<<*,*>>>
-        do k=1,n(3)
-          do j=1,n(2)
+        !$acc parallel loop collapse(3) present(arr_tmp, arr)
+        do k=1,n3
+          do j=1,n2
             do i=1,nn
               ii = i - 1
               arr_tmp(ii, j, k) = arr(i, j, k) ! redundant
             end do
           end do
         end do
-        !$cuf kernel do(3) <<<*,*>>>
-        do k = 1, n(3)
-          do j = 1, n(2)
+        !$acc end parallel loop
+        !
+        !$acc parallel loop collapse(3) present(arr_tmp, arr)
+        do k = 1, n3
+          do j = 1, n2
             do i = 1, nn
               ii = i - 1
               arr(i, j, k) = arr_tmp(nn - 1 - ii, j, k)
             end do
           end do
         end do
+        !$acc end parallel loop
         !
       end if
+      !
       if(is_negate_even) then
         !
-        !$cuf kernel do(3) <<<*,*>>>
-        do k = 1, n(3)
-          do j = 1, n(2)
+        !$acc parallel loop collapse(3) present(arr)
+        do k = 1, n3
+          do j = 1, n2
             do i = 1, nn
               if(mod(i,2).eq.0) then
                 arr(i, j, k) = -arr(i, j, k)
@@ -543,6 +572,7 @@ module mod_fft
             end do
           end do
         end do
+        !$acc end parallel loop
         !
       end if
     end select
@@ -550,7 +580,7 @@ module mod_fft
     return
   end subroutine posp_dctiif
   !
-  subroutine prep_dctiib(n, idir, arr, is_swap_order, is_negate_even)
+  subroutine prep_dctiib(n1, n2, n3, idir, arr, is_swap_order, is_negate_even)
     !
     ! pre-processing of a signal to perform a fast backward
     ! discrete cosine transform (DST) with FFTs (see Makhoul 1980)
@@ -560,37 +590,39 @@ module mod_fft
     ! if one of the last boolean input variables are .true.
     !
     implicit none
-    integer, intent(in), dimension(3) :: n
+    integer, intent(in) :: n1, n2, n3       ! dimensions of input/output array
     integer, intent(in) :: idir
     real(rp), intent(inout), dimension(:, :, :) :: arr
     logical, intent(in) :: is_swap_order  ! swap order of the elements of the input array? (for DST)
     logical, intent(in) :: is_negate_even ! negate every other element of the input array?
-    real(rp), allocatable, dimension(:, :, :) :: arr_tmp
-    real(rp), allocatable, dimension(:, :) :: arr_sincos
+!!!     real(rp), allocatable, dimension(:, :, :) :: arr_tmp
+!!!     real(rp), allocatable, dimension(:, :) :: arr_sincos
     integer :: i, j, k, nn, ii
-    attributes(device) :: arr
-    attributes(device) :: arr_tmp
-    attributes(device) :: arr_sincos
+!@cuf attributes(device) :: arr
+!!! !@cuf attributes(device) :: arr_tmp
+!!! !@cuf attributes(device) :: arr_sincos
     real(rp) :: arg, carg, sarg
     !
-    nn = n(idir) - 2
+    !nn = n(idir) - 2
     select case (idir)
     case (1)
-       if (.not. allocated(arr_tmp)) allocate (arr_tmp(0:n(idir) - 1, n(2), n(3)))
-       if (.not. allocated(arr_sincos)) allocate (arr_sincos(2, 0:nn/2))
+       nn = n1 - 2
+       if (.not. allocated(arr_tmp)) allocate (arr_tmp(0:n1 - 1, n2, n3))
+!!       if (.not. allocated(arr_sincos)) allocate (arr_sincos(2, 0:nn/2))
+       !
        if (is_swap_order) then
-          !$cuf kernel do(3) <<<*,*>>>
-          do k = 1, n(3)
-             do j = 1, n(2)
+          !$acc parallel loop collapse(3) present(arr_tmp, arr)
+          do k = 1, n3
+             do j = 1, n2
                 do i = 1, nn
                    ii = i - 1
                    arr_tmp(ii, j, k) = arr(i, j, k)
                 end do
              end do
           end do
-          !$cuf kernel do(3) <<<*,*>>>
-          do k = 1, n(3)
-             do j = 1, n(2)
+          !$acc parallel loop collapse(3) present(arr_tmp, arr)
+          do k = 1, n3
+             do j = 1, n2
                 do i = 1, nn
                    ii = i - 1
                    arr(i, j, k) = arr_tmp(nn - 1 - ii, j, k)
@@ -598,10 +630,11 @@ module mod_fft
              end do
           end do
        end if
+       !
        if (is_negate_even) then
-          !$cuf kernel do(3) <<<*,*>>>
-          do k = 1, n(3)
-             do j = 1, n(2)
+          !$acc parallel loop collapse(3) present(arr_tmp, arr)
+          do k = 1, n3
+             do j = 1, n2
                 do i = 1, nn
                    if (mod(i, 2).eq.0) then
                       arr(i, j, k) = -arr(i, j, k)
@@ -610,39 +643,43 @@ module mod_fft
              end do
           end do
        end if
-       !$cuf kernel do(2) <<<*,*>>>
-       do k = 1, n(3)
-          do j = 1, n(2)
+       !
+       !$acc parallel loop collapse(2) present(arr)
+       do k = 1, n3
+          do j = 1, n2
              arr(nn + 1, j, k) = 0.
              arr(nn + 2, j, k) = 0.
           end do
        end do
-       !$cuf kernel do(1) <<<*,*>>>
-       do i = 1, nn + 2, 2
-          ii = (i - 1)/2
-          arg = pi*ii/(2.*nn)
-          arr_sincos(1, ii) = sin(arg)
-          arr_sincos(2, ii) = cos(arg)
-       end do
-       !$cuf kernel do(3) <<<*,*>>>
-       do k = 1, n(3)
-          do j = 1, n(2)
+       !
+!!       !$acc parallel loop collapse(1) present(arr_sincos)
+!!       do i = 1, nn + 2, 2
+!!          ii = (i - 1)/2
+!!          arg = pi*ii/(2.*nn)
+!!          arr_sincos(1, ii) = sin(arg)
+!!          arr_sincos(2, ii) = cos(arg)
+!!       end do
+       !
+       !$acc parallel loop collapse(3) present(arr_tmp, arr)
+       do k = 1, n3
+          do j = 1, n2
              do i = 1, nn + 2, 2
                 ii = (i - 1)/2
                 !arr_tmp(2*ii  ,j,k)  = real( 1.*exp(ri_unit*pi*ii/(2.*nn))*(arr(ii+1,j,k)-ri_unit*arr(nn-ii+1,j,k)))
                 !arr_tmp(2*ii+1,j,k)  = aimag(1.*exp(ri_unit*pi*ii/(2.*nn))*(arr(ii+1,j,k)-ri_unit*arr(nn-ii+1,j,k)))
-                !arg = pi*ii/(2.*nn)
+                arg = pi*ii/(2.*nn)
                 !call sincos(arg,sarg,carg)
-                carg = arr_sincos(2, ii)!cos(arg)
-                sarg = arr_sincos(1, ii)!sin(arg)
+                carg = cos(arg)
+                sarg = sin(arg)
                 arr_tmp(2*ii, j, k) = 1.*(carg*arr(ii + 1, j, k) + sarg*arr(nn - ii + 1, j, k))
                 arr_tmp(2*ii + 1, j, k) = 1.*(sarg*arr(ii + 1, j, k) - carg*arr(nn - ii + 1, j, k))
              end do
           end do
        end do
-       !$cuf kernel do(3) <<<*,*>>>
-       do k = 1, n(3)
-          do j = 1, n(2)
+       !
+       !$acc parallel loop collapse(3) present(arr_tmp, arr)
+       do k = 1, n3
+          do j = 1, n2
              do i = 1, nn + 2
                 ii = i - 1
                 arr(i, j, k) = arr_tmp(ii, j, k)
@@ -651,9 +688,11 @@ module mod_fft
        end do
        !deallocate(arr_tmp)
     end select
+    !
     return
   end subroutine prep_dctiib
-  subroutine posp_dctiib(n, idir, arr, is_swap_order, is_negate_even)
+  !
+  subroutine posp_dctiib(n1, n2, n3, idir, arr, is_swap_order, is_negate_even)
     !
     ! post-processing of a signal to perform a fast forward
     ! discrete cosine transform (DCT) with FFTs (see Makhoul 1980)
@@ -671,33 +710,35 @@ module mod_fft
     ! if one of the last boolean input variables are .true.
     !
     implicit none
-    integer, intent(in), dimension(3) :: n       ! dimensions of input/output array
+    integer, intent(in) :: n1, n2, n3       ! dimensions of input/output array
     integer, intent(in) :: idir                  ! array direction where the transform is taken
     real(rp), intent(inout), dimension(:, :, :) :: arr ! input/output array
     logical, intent(in) :: is_swap_order  ! swap order of the elements of the input array? (for DST)
     logical, intent(in) :: is_negate_even ! negate every other element of the input array?
-    real(rp), allocatable, dimension(:, :, :) :: arr_tmp
+!!!     real(rp), allocatable, dimension(:, :, :) :: arr_tmp
     integer :: i, j, k, nn, ii
-    attributes(device) :: arr
-    attributes(device) :: arr_tmp
+!@cuf attributes(device) :: arr
+!!! !@cuf attributes(device) :: arr_tmp
     !
-    nn = n(idir)
+    !nn = n(idir)
     select case (idir)
     case (1)
-       if (.not. allocated(arr_tmp)) allocate (arr_tmp(0:n(idir) - 1, n(2), n(3)))
-       !$cuf kernel do(3) <<<*,*>>>
-       do k = 1, n(3)
-          do j = 1, n(2)
-             do i = 1, n(1)
+       nn = n1
+       if (.not. allocated(arr_tmp)) allocate (arr_tmp(0:n1 - 1, n2, n3))
+       !
+       !$acc parallel loop collapse(3) present(arr_tmp, arr)
+       do k = 1, n3
+          do j = 1, n2
+             do i = 1, n1
                 ii = i - 1
                 arr_tmp(ii, j, k) = arr(i, j, k)
              end do
           end do
        end do
-       !$cuf kernel do(3) <<<*,*>>>
-       do k = 1, n(3)
-          do j = 1, n(2)
-             do i = 1, n(1)
+       !$acc parallel loop collapse(3) present(arr_tmp, arr)
+       do k = 1, n3
+          do j = 1, n2
+             do i = 1, n1
                 ii = i - 1
                 if (ii.le.(nn - 1)/2) then
                    arr(2*ii + 1, j, k) = arr_tmp(ii, j, k)
@@ -707,19 +748,21 @@ module mod_fft
              end do
           end do
        end do
+       !
        if (is_swap_order) then
-          !$cuf kernel do(3) <<<*,*>>>
-          do k = 1, n(3)
-             do j = 1, n(2)
+          !$acc parallel loop collapse(3) present(arr)
+          do k = 1, n3
+             do j = 1, n2
                 do i = 1, nn
                    ii = i - 1
                    arr_tmp(ii, j, k) = arr(i, j, k)
                 end do
              end do
           end do
-          !$cuf kernel do(3) <<<*,*>>>
-          do k = 1, n(3)
-             do j = 1, n(2)
+          !
+          !$acc parallel loop collapse(3) present(arr_tmp, arr)
+          do k = 1, n3
+             do j = 1, n2
                 do i = 1, nn
                    ii = i - 1
                    arr(i, j, k) = arr_tmp(nn - 1 - ii, j, k)
@@ -727,10 +770,11 @@ module mod_fft
              end do
           end do
        end if
+       !
        if (is_negate_even) then
-          !$cuf kernel do(3) <<<*,*>>>
-          do k = 1, n(3)
-             do j = 1, n(2)
+          !$acc parallel loop collapse(3) present(arr)
+          do k = 1, n3
+             do j = 1, n2
                 do i = 1, nn
                    if (mod(i, 2).eq.0) then
                       arr(i, j, k) = -arr(i, j, k)
@@ -741,6 +785,7 @@ module mod_fft
        end if
        !deallocate(arr_tmp)
     end select
+    !
     return
   end subroutine posp_dctiib
   !
@@ -759,8 +804,13 @@ module mod_fft
     integer         , intent(in   )                   :: idir
     real(rp)        , intent(inout), dimension(:,:,:) :: arr
     !
-    attributes(device) :: arr
-    integer :: istat
+!@cuf attributes(device) :: arr
+    integer :: n1, n2, n3
+!@cuf integer :: istat
+    !
+    n1 = n(1)
+    n2 = n(2)
+    n3 = n(3)
     !
     select case(cbc)
     case('PP')
@@ -770,12 +820,12 @@ module mod_fft
         if(    pre_or_pos.eq.0) then
           return
         elseif(pre_or_pos.eq.1) then
-          call posp_fftf(n, idir, arr)
+          call posp_fftf(n1, n2, n3, idir, arr)
         else
         end if
       case('B')
         if(    pre_or_pos.eq.0) then
-          call prep_fftb(n, idir, arr)
+          call prep_fftb(n1, n2, n3, idir, arr)
         elseif(pre_or_pos.eq.1) then
           return
         else
@@ -788,17 +838,18 @@ module mod_fft
       if(c_or_f.eq.'c') then
         select case (f_or_b)
         case('F')
+          ! I AM HERE
           if(pre_or_pos.eq.0) then
-            call prep_dctiif(n, idir, arr,.false.,.false.)
+            call prep_dctiif(n1, n2, n3, idir, arr,.false.,.false.)
           elseif (pre_or_pos.eq.1) then
-            call posp_dctiif(n, idir, arr,.false.,.false.)
+            call posp_dctiif(n1, n2, n3, idir, arr,.false.,.false.)
           else
           end if
         case('B')
           if(pre_or_pos.eq.0) then
-            call prep_dctiib(n, idir, arr,.false.,.false.)
+            call prep_dctiib(n1, n2, n3, idir, arr,.false.,.false.)
           elseif(pre_or_pos.eq.1) then
-            call posp_dctiib(n, idir, arr,.false.,.false.)
+            call posp_dctiib(n1, n2, n3, idir, arr,.false.,.false.)
           else
           end if
         case default
@@ -810,16 +861,16 @@ module mod_fft
         select case (f_or_b)
         case('F')
           if(pre_or_pos.eq.0) then
-            call prep_dctiif(n, idir, arr,.false.,.true. )
+            call prep_dctiif(n1, n2, n3, idir, arr,.false.,.true. )
           elseif (pre_or_pos.eq.1) then
-            call posp_dctiif(n, idir, arr,.true. ,.false.)
+            call posp_dctiif(n1, n2, n3, idir, arr,.true. ,.false.)
           else
           end if
         case('B')
           if(pre_or_pos.eq.0) then
-            call prep_dctiib(n, idir, arr,.true. ,.false.)
+            call prep_dctiib(n1, n2, n3, idir, arr,.true. ,.false.)
           elseif (pre_or_pos.eq.1) then
-            call posp_dctiib(n, idir, arr,.false.,.true. )
+            call posp_dctiib(n1, n2, n3, idir, arr,.false.,.true. )
           else
           end if
         case default

@@ -6,9 +6,7 @@ module mod_chkdiv
   use mpi
   use mod_common_mpi, only: myid,ierr
   use mod_types
-#if defined(_OPENACC)
-  use cudafor
-#endif
+  !@cuf use cudafor
   !
   implicit none
   !
@@ -31,10 +29,7 @@ module mod_chkdiv
     real(rp), intent(out)                                     :: divtot,divmax
     !
     real(rp) :: div
-#if defined(_OPENACC)
-    attributes(managed) :: u,v,w,dzfi
-    integer :: istat
-#endif
+    !@cuf attributes(managed) :: u,v,w,dzfi
     integer :: i,j,k
     !
     divtot = 0._rp
@@ -63,7 +58,6 @@ module mod_chkdiv
     enddo
 #if defined(_OPENACC)
     !$acc end parallel loop 
-    !@cuf istat=cudaDeviceSynchronize()
 #else
     !$OMP END PARALLEL DO
 #endif

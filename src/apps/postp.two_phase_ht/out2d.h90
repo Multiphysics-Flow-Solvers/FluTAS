@@ -20,15 +20,22 @@
   !
   ! modify the calls below as desired
   !
-  call write_visu_2d(datadir,'u_slice_fld_'//fldnum//'.bin','log_visu_2d_slice_1.out','Velocity_X', &
-                     2,ng(2)/2,ng,time,istep, &
+  call write_visu_2d(datadir,'vex_slice_fld_'//fldnum//'.bin','log_visu_2d_slice_1.out','Velocity_X', &
+                     1,ng(1)/2,ng,time,istep, &
                      u(1:n(1),1:n(2),1:n(3)))
-  call write_visu_2d(datadir,'v_slice_fld_'//fldnum//'.bin','log_visu_2d_slice_1.out','Velocity_Y', &
-                     2,ng(2)/2,ng,time,istep, &
+  call write_visu_2d(datadir,'vey_slice_fld_'//fldnum//'.bin','log_visu_2d_slice_1.out','Velocity_Y', &
+                     1,ng(1)/2,ng,time,istep, &
                      v(1:n(1),1:n(2),1:n(3)))
-  call write_visu_2d(datadir,'w_slice_fld_'//fldnum//'.bin','log_visu_2d_slice_1.out','Velocity_Z', &
-                     2,ng(2)/2,ng,time,istep, &
+  call write_visu_2d(datadir,'vez_slice_fld_'//fldnum//'.bin','log_visu_2d_slice_1.out','Velocity_Z', &
+                     1,ng(1)/2,ng,time,istep, &
                      w(1:n(1),1:n(2),1:n(3)))
-  call write_visu_2d(datadir,'p_slice_fld_'//fldnum//'.bin','log_visu_2d_slice_1.out','Pressure_P', &
-                     2,ng(2)/2,ng,time,istep, &
+  call write_visu_2d(datadir,'pre_slice_fld_'//fldnum//'.bin','log_visu_2d_slice_1.out','Pressure_P', &
+                     1,ng(1)/2,ng,time,istep, &
                      p(1:n(1),1:n(2),1:n(3)))
+  call write_visu_2d(datadir,'tmp_slice_fld_'//fldnum//'.bin','log_visu_2d_slice_1.out','Temperature', &
+                     1,ng(1)/2,ng,time,istep, &
+                     tmp(1:n(1),1:n(2),1:n(3)))
+  call write_visu_2d(datadir,'vof_slice_fld_'//fldnum//'.bin','log_visu_2d_slice_1.out','VoF', &
+                     1,ng(1)/2,ng,time,istep, &
+                     psi(1:n(1),1:n(2),1:n(3)))
+

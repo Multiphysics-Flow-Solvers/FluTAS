@@ -8,9 +8,7 @@ module mod_cmpt_divth
   use mod_param, only: gam_g
   use mod_types
   use mod_common_mpi
-#if defined(_OPENACC)
-  use cudafor
-#endif
+  !@cuf use cudafor
   !
   implicit none
   !
@@ -37,10 +35,7 @@ module mod_cmpt_divth
                 kappazp,kappazm
     integer  :: i,j,k,im,jm,km,ip,jp,kp
     !
-#if defined(_OPENACC)
-    attributes(managed) :: vof,kappa,div_th,s
-    integer             :: istat
-#endif
+    !@cuf attributes(managed) :: vof, kappa, div_th, s
     !
 #if defined(_OPENACC)
     !$acc kernels
@@ -53,14 +48,9 @@ module mod_cmpt_divth
     !$OMP PRIVATE(diff) &
     !$OMP SHARED(nx,ny,nz,dxi,dyi,dzi,gam_g,dp0dt,p0,vof,kappa,s)
 #endif
-    !
     do k=1,nz
       do j=1,ny
         do i=1,nx
-#if defined(_OPENACC) && defined(_ACC_OPT) 
-          !$acc cache(s(i-1:i+1,j-1:j+1,k-1:k+1))
-          !$acc cache(kappa(i-1:i+1,j-1:j+1,k-1:k+1))
-#endif
           ip = i+1
           im = i-1
           jp = j+1
@@ -94,7 +84,6 @@ module mod_cmpt_divth
     enddo
 #if defined(_OPENACC)
     !$acc end kernels 
-    !@cuf istat=cudaDeviceSynchronize()
 #else
     !$OMP END PARALLEL DO
 #endif
@@ -119,10 +108,7 @@ module mod_cmpt_divth
     !
     integer :: i,j,k
     real(rp):: rho_gas,rho_liq
-#if defined(_OPENACC)
-    attributes(managed) :: psi,tmp,rho
-    integer             :: istat
-#endif
+    !@cuf attributes(managed) :: psi, tmp, rho
     !
     if(flag) gas_mass = 0._rp
     !
@@ -148,7 +134,6 @@ module mod_cmpt_divth
     enddo
 #if defined(_OPENACC)
     !$acc end kernels 
-    !@cuf istat=cudaDeviceSynchronize()
 #else
     !$OMP END PARALLEL DO
 #endif
@@ -176,11 +161,7 @@ module mod_cmpt_divth
     real(rp):: lxi,lyi,lzi,dxi,dyi,dzi
     real(rp):: div_s,e_div_v
     !
-#if defined(_OPENACC)
-    attributes(managed) :: div_th
-    attributes(managed) :: u,v,w
-    integer             :: istat
-#endif
+    !@cuf attributes(managed) :: div_th, u, v, w
     !
     lxi = 1._rp/lx
     lyi = 1._rp/ly
@@ -193,6 +174,7 @@ module mod_cmpt_divth
     e_div_mean = 0._rp
     !
 #if defined(_OPENACC)
+    ! [TODO] Add collapse(3) here or switch to kernels?
     !$acc parallel loop reduction(+:e_div_mean)
 #else
     !$OMP PARALLEL DO DEFAULT(none) &
@@ -205,11 +187,6 @@ module mod_cmpt_divth
       do j=1,ny
         do i=1,nx
           !
-#if defined(_OPENACC) && defined(_ACC_OPT) 
-          !$acc cache(u(i-1:i,j:j,k:k))
-          !$acc cache(v(i:i,j-1:j,k:k))
-          !$acc cache(v(i:i,j:j,k:k-1))
-#endif
           div_s = (u(i,j,k)-u(i-1,j,k))*dxi + &
                   (v(i,j,k)-v(i,j-1,k))*dyi + &
                   (w(i,j,k)-w(i,j,k-1))*dzi
@@ -223,7 +200,6 @@ module mod_cmpt_divth
     enddo
 #if defined(_OPENACC)
     !$acc end parallel loop
-    !@cuf istat=cudaDeviceSynchronize()
 #else
     !$OMP END PARALLEL DO
 #endif

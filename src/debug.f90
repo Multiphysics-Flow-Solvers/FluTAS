@@ -6,9 +6,7 @@ module mod_debug
   use mpi
   use mod_common_mpi, only: myid,ierr
   use mod_types
-#if defined(_OPENACC)
-  use cudafor
-#endif
+  !@cuf use cudafor
   !
   implicit none
   !
@@ -30,16 +28,13 @@ module mod_debug
     real(rp), intent(in ), dimension(1-nh_p:,1-nh_p:,1-nh_p:) :: p
     real(rp), intent(out)                                     :: mean
     !
-#if defined(_OPENACC)
-    attributes(managed) :: p,dzlzi
-    integer :: istat
-#endif
+    !@cuf attributes(managed) :: p, dzlzi
     integer :: i,j,k
     !
     mean = 0._rp
     !
 #if defined(_OPENACC)
-    !$cuf kernel do(3) <<<*,*>>>
+    !$acc parallel loop collapse(3) reduction(+:mean)
 #else
     !$OMP PARALLEL DO DEFAULT(none) &
     !$OMP SHARED(n,p,dzlzi) &
@@ -53,10 +48,12 @@ module mod_debug
         enddo
       enddo
     enddo
-#if !defined(_OPENACC)
+#if defined(_OPENACC)
+    !$acc end parallel loop 
+#else
     !$OMP END PARALLEL DO
 #endif
-    !@cuf istat=cudaDeviceSynchronize()
+    !
     call mpi_allreduce(MPI_IN_PLACE,mean,1,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
     mean = mean/(1._rp*nx*dims(1)*ny*dims(2))
     !

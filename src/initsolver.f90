@@ -17,6 +17,7 @@ module mod_initsolver
   !
   contains
   !
+  ! [NOTE] Should this run on GPU as well? 
   subroutine initsolver(n,dims,dims_z,dli,nh_d,dzci,dzfi,cbc,bc,c_or_f,lambdaxy,a,b,c,arrplan,normfft,rhsbx,rhsby,rhsbz)
     !
     ! initializes the Poisson/Helmholtz solver

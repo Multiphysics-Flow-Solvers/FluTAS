@@ -4,10 +4,7 @@
 module mod_correc
   !
   use mod_types     , only: rp
-#if defined(_OPENACC)
-  use cudafor
-  use mod_common_mpi, only: mydev
-#endif
+  !@cuf use cudafor
   !
   implicit none
   !
@@ -31,28 +28,17 @@ module mod_correc
     real(rp), intent(in ), dimension(0:,0:,0:)                :: rho
     real(rp), intent(out), dimension(1-nh_u:,1-nh_u:,1-nh_u:) :: u,v,w
     !
-    real(rp), dimension(1-nh_d:nz+nh_d) :: factork
     real(rp) :: factori,factorj
     integer  :: i,j,k,ip,jp,kp
     real(rp) :: rhox,rhoy,rhoz
     real(rp) :: rho0i
-#if defined(_OPENACC)
-    integer :: istat
-    attributes(managed) :: u, v, w, rho, p, up, vp, wp, dzci, factork
-    ! Enable? Or Disable?
-    istat = cudaMemAdvise( factork, size(factork), cudaMemAdviseSetPreferredLocation, mydev )
-    istat = cudaMemPrefetchAsync( factork, size(factork), mydev, 0)
-#endif
+    !@cuf attributes(managed) :: u, v, w, rho, p, up, vp, wp, dzci
     !
     rho0i = 1._rp/rho0
     !
     factori = dt*dxi
     factorj = dt*dyi
-    !$acc kernels
-    do k=1-nh_d,nz+nh_d
-      factork(k) = dt*dzci(k)
-    enddo
-    !$acc end kernels
+    !
 #if defined(_OPENACC)
     !$acc kernels
 #else
@@ -71,7 +57,7 @@ module mod_correc
 #if defined(_CONSTANT_COEFFS_POISSON)
           u(i,j,k) = up(i,j,k) - factori*(    p( ip,j,k)-p( i,j,k) )*rho0i
           v(i,j,k) = vp(i,j,k) - factorj*(    p( i,jp,k)-p( i,j,k) )*rho0i
-          w(i,j,k) = wp(i,j,k) - factork(k)*( p( i,j,kp)-p( i,j,k) )*rho0i
+          w(i,j,k) = wp(i,j,k) - dt*dzci(k)*( p( i,j,kp)-p( i,j,k) )*rho0i
 #else
           !
           rhox = 0.5_rp*(rho(ip,j,k)+rho(i,j,k))
@@ -80,7 +66,7 @@ module mod_correc
           !
           u(i,j,k) = up(i,j,k) - factori*(    p( ip,j,k)-p( i,j,k) )/rhox
           v(i,j,k) = vp(i,j,k) - factorj*(    p( i,jp,k)-p( i,j,k) )/rhoy
-          w(i,j,k) = wp(i,j,k) - factork(k)*( p( i,j,kp)-p( i,j,k) )/rhoz
+          w(i,j,k) = wp(i,j,k) - dt*dzci(k)*( p( i,j,kp)-p( i,j,k) )/rhoz
 #endif
           !
         enddo
@@ -88,7 +74,6 @@ module mod_correc
     enddo
 #if defined(_OPENACC)
     !$acc end kernels 
-    !@cuf istat=cudaDeviceSynchronize()
 #else
     !$OMP END PARALLEL DO
 #endif

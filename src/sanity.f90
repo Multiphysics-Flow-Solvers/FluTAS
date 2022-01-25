@@ -245,6 +245,7 @@ module mod_sanity
     return 
   end subroutine chk_forcing
   !
+  ! [NOTE] Never called?
   subroutine chk_solvers(n,dims,dims_xyz,dli,nh_d,nh_u,nh_p,halo_u,halo_up,halo_p, &
                          dzci,dzfi,cbcvel,cbcpre,bcvel,bcpre,is_outflow,passed)
     !
@@ -283,7 +284,7 @@ module mod_sanity
     real(rp) :: divtot,divmax,resmax
     logical  :: passed_loc
 #if defined(_OPENACC)
-    attributes(managed) :: a,b,bb,c,lambdaxy,rhsbx,rhsby,rhsbz
+    attributes(managed) :: a,b,bb,c,lambdaxy,rhsbx,rhsby,rhsbz, dzc, dzf
 #endif
     passed = .true.
     !

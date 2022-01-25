@@ -4,9 +4,7 @@
 module mod_fillps
   !
   use mod_types, only: rp
-#if defined(_OPENACC)
-  use cudafor
-#endif
+  !@cuf use cudafor
   !
   implicit none
   !
@@ -30,13 +28,11 @@ module mod_fillps
     real(rp), dimension(1-nh_d:nz+nh_d) :: dtidzfi
     real(rp) :: dtidxi,dtidyi
     integer  :: i,j,k,im,jm,km
-#if defined(_OPENACC)
-    integer :: istat
-    attributes(managed) :: p, up,vp,wp,dtidzfi,dzci,dzfi
-#endif
+    !@cuf attributes(managed) :: p, up, vp, wp, dtidzfi, dzci, dzfi
     !
     dtidxi = dti*dxi
     dtidyi = dti*dyi
+    ! [TODO] Fuse into main loop below
     !$acc kernels
     do k=1-nh_d,nz+nh_d
       dtidzfi(k) = dti*dzfi(k)
@@ -72,7 +68,6 @@ module mod_fillps
     enddo
 #if defined(_OPENACC)
     !$acc end kernels 
-    !@cuf istat=cudaDeviceSynchronize()
 #else
     !$OMP END PARALLEL DO
 #endif

@@ -17,11 +17,12 @@ module mod_rk
 #if defined(_TURB_FORCING)
   use mod_source,     only: forc_src
 #endif
-#if defined(_OPENACC)
-  use cudafor
-#endif
+  !@cuf use cudafor
   !
   implicit none
+  !
+  real(rp), allocatable, dimension(:,:,:) :: dudtrk, dvdtrk, dwdtrk
+  !@cuf attributes(managed) :: dudtrk, dvdtrk, dwdtrk
   !
   private
   public  :: rk
@@ -52,26 +53,23 @@ module mod_rk
 #if defined(_BOUSSINESQ)
     integer , intent(in   )                                     :: nh_t
     real(rp), intent(in   ), dimension(1-nh_t:,1-nh_t:,1-nh_t:) :: tmp
+    !@cuf attributes(managed) :: tmp
 #endif
     real(rp), intent(inout), dimension(      :,      :,      :) :: dudtrko,dvdtrko,dwdtrko
     real(rp), intent(out  ), dimension(     0:,     0:,     0:) :: up,vp,wp
     real(rp), intent(out  ), dimension(3), optional             :: f
-    !
-    real(rp), dimension(nx,ny,nz) :: dudtrk,dvdtrk,dwdtrk
     real(rp) :: factor1,factor2,factor12
     real(rp) :: rho_av
     real(rp) :: meanvel
     integer  :: i,j,k,nh_up
-#if defined(_OPENACC)
-    attributes(managed) :: dzci,dzfi,u,v,w,p, pp
-    attributes(managed) :: dudtrk,dvdtrk,dwdtrk,up,vp,wp
-    attributes(managed) :: p,kappa,psi,mu,rho
-    attributes(managed) :: dudtrko,dvdtrko,dwdtrko
-#if defined(_BOUSSINESQ)
-    attributes(managed) :: tmp
-#endif
-    integer             :: istat
-#endif
+    !
+    !@cuf attributes(managed) :: dzci, dzfi, u, v, w, p, pp, dudtrko, dvdtrko, dwdtrko
+    !@cuf attributes(managed) :: up, vp, wp, mu, rho, kappa, psi, rho
+    !
+    ! Allocate once
+    if( (.not.allocated(dudtrk)) .or. (.not.allocated(dvdtrk)) .or. (.not.allocated(dwdtrk) ) ) then
+      allocate (dudtrk(nx,ny,nz),dvdtrk(nx,ny,nz),dwdtrk(nx,ny,nz))
+    endif
     !
     nh_up = abs(lbound(up ,1))+1
     !
@@ -97,7 +95,6 @@ module mod_rk
       enddo
 #if defined(_OPENACC)
       !$acc end parallel loop 
-      !@cuf istat=cudaDeviceSynchronize()
 #endif
       call MPI_ALLREDUCE(MPI_IN_PLACE,rho_av,1,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
       rho_av = rho_av/(lx*ly*lz)
@@ -123,7 +120,6 @@ module mod_rk
       enddo
 #if defined(_OPENACC)
       !$acc end kernels 
-      !@cuf istat=cudaDeviceSynchronize()
 #endif
       is_first = .false.
     endif
@@ -153,7 +149,6 @@ module mod_rk
     enddo
 #if defined(_OPENACC)
     !$acc end kernels 
-    !@cuf istat=cudaDeviceSynchronize()
 #else
     !$OMP END PARALLEL DO
 #endif
@@ -196,7 +191,6 @@ module mod_rk
     enddo
 #if defined(_OPENACC)
     !$acc end kernels 
-    !@cuf istat=cudaDeviceSynchronize()
 #else
     !$OMP END PARALLEL DO
 #endif
@@ -217,7 +211,7 @@ module mod_rk
         enddo
       enddo
       !$acc end kernels
-      !@cuf istat=cudaDeviceSynchronize()
+      !
       if(present(f)) then
         f(1) = bulk_velx-meanvel
       endif
@@ -233,7 +227,7 @@ module mod_rk
         enddo
       enddo
       !$acc end kernels
-      !@cuf istat=cudaDeviceSynchronize()
+      !
       if(present(f)) then
         f(2) = bulk_vely-meanvel
       endif
@@ -249,7 +243,7 @@ module mod_rk
         enddo
       enddo
       !$acc end kernels
-      !@cuf istat=cudaDeviceSynchronize()
+      !
       if(present(f)) then
         f(3) = bulk_velz-meanvel
       endif

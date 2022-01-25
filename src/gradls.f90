@@ -4,9 +4,7 @@
 module mod_gradls
   !
   use mod_types, only: rp
-#if defined(_OPENACC)
-  use cudafor
-#endif
+  !@cuf use cudafor
   !
   implicit none
   !
@@ -158,11 +156,7 @@ module mod_gradls
     integer  :: a,i,j,k,p
     real(rp) :: uxc,uyc,uzc
     integer  :: q
-#if defined(_OPENACC)
-    integer :: istat
-    attributes(managed) :: ux,uy,uz
-    attributes(managed) :: phi,dphidt
-#endif
+    !@cuf attributes(managed) :: ux, uy, uz, phi, dphidt
     !
     if(is_f) then
       q = 1
@@ -187,12 +181,6 @@ module mod_gradls
       do j=1,ny
         do i=1,nx
           !
-#if defined(_OPENACC) && defined(_ACC_OPT) 
-          !$acc cache(ux(i-q:i,j:j,k:k))
-          !$acc cache(uy(i:i,j-q:j,k:k))
-          !$acc cache(uz(i:i,j:j,k-q:k))
-          !$acc cache(phi(i-3:i+3,j-3:j+3,k-3:k+3))
-#endif
           uxc = 0.5_rp*(ux(i-q,j,k)+ux(i,j,k))
 #if defined(_TWOD)
           dphidx = 0._rp
@@ -279,10 +267,10 @@ module mod_gradls
     enddo
 #if defined(_OPENACC)
     !$acc end kernels 
-    !@cuf istat=cudaDeviceSynchronize()
 #else
     !$OMP END PARALLEL DO
 #endif
+    !
     return
   end subroutine weno5
 end module mod_gradls

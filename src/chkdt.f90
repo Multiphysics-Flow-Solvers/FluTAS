@@ -11,9 +11,7 @@ module mod_chkdt
                        sigma,gacc
   use mod_common_mpi,  only: ierr
   use mod_types
-#if defined(_OPENACC)
-  use cudafor
-#endif
+  !@cuf use cudafor
   !
   implicit none
   !
@@ -43,10 +41,7 @@ module mod_chkdt
 #if defined(_HEAT_TRANSFER)
     real(rp) :: dtth
 #endif
-#if defined(_OPENACC)
-    attributes(managed) :: u, v, w, dzci, dzfi
-    integer :: istat
-#endif
+    !@cuf attributes(managed) :: u, v, w, dzci, dzfi
     integer :: i,j,k
     !
     dti = 0._rp
@@ -85,7 +80,6 @@ module mod_chkdt
     enddo
 #if defined(_OPENACC)
     !$acc end parallel loop 
-    !@cuf istat=cudaDeviceSynchronize()
 #else
     !$OMP END PARALLEL DO
 #endif

@@ -18,7 +18,7 @@ P. Costa, E. Phillips, L. Brandt & M. Fatica, *GPU acceleration of CaNS for mass
 ## Features
 Current physics modules implemented:
  * Base solver for the incompressible two-fluid Navier-Stokes equations;
- * Multiphase flows, using the VoF MTHINC method (see references);
+ * Multiphase flows, using the VoF MTHINC method;
  * Heat Transfer, solving the energy equation (Boussinesq effects can be included in the gas phase). 
 
 Some features are:

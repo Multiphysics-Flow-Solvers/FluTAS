@@ -32,17 +32,18 @@ postprocessing/spectra.o : param.o
 postprocessing/spectra.o : types.o
 postprocessing/spectra.o : 2decomp/decomp_2d.o
 postprocessing/spectra.o : fftw_spectra.o
+postprocessing/tagging.o : bound.o
 postprocessing/tagging.o : common_mpi.o
 postprocessing/tagging.o : param.o
 postprocessing/tagging.o : types.o
 
 # 2decomp
-2decomp/decomp_2d.o : nvtx.o
+2decomp/decomp_2d.o : profiler.o
 2decomp/io.o : 2decomp/decomp_2d.o 
 
 # src 
 bound.o : common_mpi.o
-bound.o : nvtx.o
+bound.o : profiler.o
 bound.o : types.o
 chkdiv.o : common_mpi.o
 chkdiv.o : types.o
@@ -89,7 +90,7 @@ mom.o : funcs.o
 mom.o : types.o
 moms.o : common_mpi.o
 moms.o : gradls.o
-moms.o : nvtx.o
+moms.o : profiler.o
 moms.o : param.o
 moms.o : types.o
 output.o : 2decomp/io.o
@@ -135,6 +136,6 @@ source.o : types.o
 vof.o : 2decomp/decomp_2d.o
 vof.o : bound.o
 vof.o : common_mpi.o
-vof.o : nvtx.o
+vof.o : profiler.o
 vof.o : param.o
 vof.o : types.o

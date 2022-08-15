@@ -8,9 +8,6 @@ module mod_post
                             left,right
   use mpi
   use mod_param,     only: lx,ly,lz
-#if defined(_HEAT_TRANSFER)
-  use mod_param,     only: kappa1,kappa2,deltaT
-#endif
 #if defined(_OPENACC)
   use cudafor
   use mod_common_mpi, only: mydev
@@ -19,10 +16,29 @@ module mod_post
   implicit none
   !
   private
-  public  :: wall_avg,time_avg,compute_vorticity,mixed_variables
+  public  :: compute_vorticity,mixed_variables,budget
+#if defined(_HEAT_TRANSFER)
+  public  :: wall_avg
+#endif
+#if defined(_USE_VOF)
+  public  :: time_tw_avg
+#else
+  public  :: time_sp_avg
+#endif
+  !
   contains
   !
+#if defined(_HEAT_TRANSFER)
   subroutine wall_avg(idir,nx,ny,nz,ngx,ngy,ngz,dxi,dyi,dzi,nh_t,ka,tmp,time)
+    !
+    ! note: --> to be generalized for non-uniform grid along z (streched grid)
+    !
+    use mod_param, only: deltaT
+#if defined(_USE_VOF)
+    use mod_param, only: kappa2
+#else
+    use mod_param, only: kappa_sp
+#endif
     !
     implicit none
     !
@@ -44,7 +60,12 @@ module mod_post
     attributes(managed) :: ka, tmp
 #endif
     !
+#if defined(_USE_VOF)
     ka_ref = kappa2
+#else
+    ka_ref = kappa_sp
+    kap    = kappa_sp
+#endif
     !
     select case(idir)
     !
@@ -62,7 +83,9 @@ module mod_post
         do j=1,ny
           do i=1,nx
             dtdz = (tmp(i,j,k)-tmp(i,j,km))*dzi
+#if defined(_USE_VOF)
             kap  = 0.5_rp*(ka(i,j,k)+ka(i,j,km))
+#endif
             nusselt_up = nusselt_up + kap*dtdz
           enddo
         enddo
@@ -80,7 +103,9 @@ module mod_post
         do j=1,ny 
           do i=1,nx
             dtdz = (tmp(i,j,kp)-tmp(i,j,k))*dzi
+#if defined(_USE_VOF)
             kap  = 0.5_rp*(ka(i,j,k)+ka(i,j,kp))
+#endif
             nusselt_down = nusselt_down - kap*dtdz
           enddo
         enddo
@@ -109,7 +134,9 @@ module mod_post
         do k=1,nz
           do i=1,nx
             dtdy = (tmp(i,j,k)-tmp(i,jm,k))*dyi
+#if defined(_USE_VOF)
             kap  = 0.5_rp*(ka(i,j,k)+ka(i,jm,k))
+#endif
             nusselt_up = nusselt_up + kap*dtdy
           enddo
         enddo
@@ -192,12 +219,14 @@ module mod_post
     !
     return
   end subroutine wall_avg
+#endif
   !
-  subroutine time_avg(idir,do_avg,do_favre,is_stag,fname,n,ng,istep,istep_av,iout1d, &
-                      nh_d,nh_v,nh_p,psi,rho_p,p,pout1,pout2,pvol1,pvol2)
+#if defined(_USE_VOF)
+  subroutine time_tw_avg(idir,do_avg,do_favre,is_stag,fname,n,ng,istep,istep_av,iout1d, &
+                         nh_d,nh_v,nh_p,psi,rho_p,p,pout1,pout2,pvol1,pvol2)
     !
     ! writes the profile of a variable averaged
-    ! over two domain directions
+    ! over two domain directions (TWO-PHASE VERSION)
     !
     ! idir     -> the direction normal to the averaging plane
     ! do_avg   -> do or not averaging
@@ -219,6 +248,8 @@ module mod_post
     ! pvol     ->  first order time statistics of volume averaged field (mean)
     ! pvol2    -> second order time statistics of volume averaged field (rms)
     !
+    ! note: --> to be generalized for non-uniform grid along z (streched grid)
+    !
     use mod_param, only: dl
     !
     implicit none
@@ -237,7 +268,7 @@ module mod_post
     real(rp)        , intent(inout)                                     :: pvol1,pvol2
     !
     real(rp), allocatable, dimension(:) :: p1d1,p1d2,rhop
-    real(rp) :: factor,factor2,p_dl12,p_avg
+    real(rp) :: factor,factor2,p_dl_idir,p_avg
     integer  :: i,j,k,mm,qx,qy,qz
     integer  :: nx,ny,nz,ngx,ngy,ngz,ng_idir
     integer  :: start
@@ -246,8 +277,6 @@ module mod_post
     integer :: istat
     attributes(managed) :: p,psi,rho_p,p1d1,p1d2,rhop,pout1,pout2
 #endif
-    !
-    p_dl12 = dl(1)*dl(2)
     !
     nx      = n(1)
     ny      = n(2)
@@ -264,9 +293,10 @@ module mod_post
     !
     allocate(p1d1(ng(idir)),p1d2(ng(idir)),rhop(ng(idir)))
     !
-    iunit   = 10
-    factor  = 1._rp*istep_av
-    factor2 = 1._rp*ng_idir/(1._rp*ngx*ngy*ngz)
+    iunit     = 10
+    factor    = 1._rp*istep_av
+    factor2   = 1._rp*ng_idir/(1._rp*ngx*ngy*ngz)
+    p_dl_idir = dl(1)*dl(2)*dl(2)/dl(idir)
     !
     if(istep_av.eq.1) then  
       do mm=1,ng_idir
@@ -296,9 +326,9 @@ module mod_post
               mm = start + i
               !
               p_avg    = 0.5_rp*(p(i,j,k)+p(i-qx,j-qy,k-qz))
-              rhop(mm) = rhop(mm) + p_dl12*rho_p(i,j,k)
-              p1d1(mm) = p1d1(mm) + p_dl12*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p_avg 
-              p1d2(mm) = p1d2(mm) + p_dl12*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p_avg**2 
+              rhop(mm) = rhop(mm) + p_dl_idir*rho_p(i,j,k)
+              p1d1(mm) = p1d1(mm) + p_dl_idir*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p_avg 
+              p1d2(mm) = p1d2(mm) + p_dl_idir*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p_avg**2 
               !
             enddo
           enddo
@@ -312,9 +342,9 @@ module mod_post
               mm = start + j
               !
               p_avg    = 0.5_rp*(p(i,j,k)+p(i-qx,j-qy,k-qz))
-              rhop(mm) = rhop(mm) + p_dl12*rho_p(i,j,k)
-              p1d1(mm) = p1d1(mm) + p_dl12*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p_avg 
-              p1d2(mm) = p1d2(mm) + p_dl12*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p_avg**2 
+              rhop(mm) = rhop(mm) + p_dl_idir*rho_p(i,j,k)
+              p1d1(mm) = p1d1(mm) + p_dl_idir*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p_avg 
+              p1d2(mm) = p1d2(mm) + p_dl_idir*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p_avg**2 
               !
             enddo
           enddo
@@ -328,9 +358,9 @@ module mod_post
               mm = start + k
               !
               p_avg    = 0.5_rp*(p(i,j,k)+p(i-qx,j-qy,k-qz))
-              rhop(mm) = rhop(mm) + p_dl12*rho_p(i,j,k)
-              p1d1(mm) = p1d1(mm) + p_dl12*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p_avg 
-              p1d2(mm) = p1d2(mm) + p_dl12*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p_avg**2 
+              rhop(mm) = rhop(mm) + p_dl_idir*rho_p(i,j,k)
+              p1d1(mm) = p1d1(mm) + p_dl_idir*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p_avg 
+              p1d2(mm) = p1d2(mm) + p_dl_idir*rho_p(i,j,k)*(1._rp-psi(i,j,k))*p_avg**2 
               !
             enddo
           enddo
@@ -454,7 +484,270 @@ module mod_post
     deallocate(p1d1,p1d2,rhop)
     !
     return
-  end subroutine time_avg
+  end subroutine time_tw_avg
+#else
+  subroutine time_sp_avg(idir,do_avg,do_favre,is_stag,fname,n,ng,istep,istep_av,iout1d, &
+                         nh_d,nh_p,rho_p,p,pout1,pout2,pvol1,pvol2)
+    !
+    ! writes the profile of a variable averaged
+    ! over two domain directions (SINGLE-PHASE VERSION)
+    !
+    ! idir     -> the direction normal to the averaging plane
+    ! do_avg   -> do or not averaging
+    ! do_favre -> Favre or regular averaging
+    ! is_stag  -> decide if "p" is a cell-centered or staggered variable
+    ! fname    -> name of the file
+    ! n        -> size of the input array
+    ! ng       -> total size of computational domain
+    ! istep    -> current time step
+    ! istep_av -> size of statistical sample
+    ! iout1d   -> print file every iout1d time steps
+    ! idir     -> direction of the profile (all other directions are averaged)
+    ! nh_      -> halos point
+    ! rho_p    -> density of the phase (for compressible phase)
+    ! p        -> 3D input scalar field to be averaged
+    ! pout1    ->  first order time statistics of plane averaged field (mean)
+    ! pout2    -> second order time statistics of plane averaged field (rms)
+    ! pvol     ->  first order time statistics of volume averaged field (mean)
+    ! pvol2    -> second order time statistics of volume averaged field (rms)
+    !
+    ! note: --> to be generalized for non-uniform grid along z (streched grid)
+    !
+    use mod_param, only: dl
+    !
+    implicit none
+    !
+    integer         , intent(in   )                                     :: idir
+    logical         , intent(in   )                                     :: do_avg,do_favre
+    integer         , intent(in   ), dimension(3)                       :: is_stag
+    character(len=*), intent(in   )                                     :: fname
+    integer         , intent(in   ), dimension(3)                       :: n,ng
+    integer         , intent(in   )                                     :: istep,istep_av,iout1d
+    integer         , intent(in   )                                     :: nh_d,nh_p
+    real(rp)        , intent(in   ), dimension(0     :,0     :,0     :) :: rho_p
+    real(rp)        , intent(in   ), dimension(1-nh_p:,1-nh_p:,1-nh_p:) :: p
+    real(rp)        , intent(inout), dimension(1:)                      :: pout1,pout2
+    real(rp)        , intent(inout)                                     :: pvol1,pvol2
+    !
+    real(rp), allocatable, dimension(:) :: p1d1,p1d2,rhop
+    real(rp) :: factor,factor2,p_dl_idir,p_avg
+    integer  :: i,j,k,mm,qx,qy,qz
+    integer  :: nx,ny,nz,ngx,ngy,ngz,ng_idir
+    integer  :: start
+    integer  :: iunit
+#if defined(_OPENACC)
+    integer :: istat
+    attributes(managed) :: p,rho_p,p1d1,p1d2,rhop,pout1,pout2
+#endif
+    !
+    nx      = n(1)
+    ny      = n(2)
+    nz      = n(3)
+    ngx     = ng(1)
+    ngy     = ng(2)
+    ngz     = ng(3)
+    ng_idir = ng(idir)
+    start   = ijk_start(idir)
+    !
+    qx = is_stag(1)
+    qy = is_stag(2)
+    qz = is_stag(3) 
+    !
+    allocate(p1d1(ng(idir)),p1d2(ng(idir)),rhop(ng(idir)))
+    !
+    iunit     = 10
+    factor    = 1._rp*istep_av
+    factor2   = 1._rp*ng_idir/(1._rp*ngx*ngy*ngz)
+    p_dl_idir = dl(1)*dl(2)*dl(2)/dl(idir)
+    !
+    if(istep_av.eq.1) then  
+      do mm=1,ng_idir
+        pout1(mm) = 0._rp
+        pout2(mm) = 0._rp
+      enddo
+    endif
+    !
+    !$acc kernels
+    do mm=1,ng_idir
+      p1d1(mm)  = 0._rp
+      p1d2(mm)  = 0._rp
+      rhop(mm)  = 0._rp
+    enddo
+    !$acc end kernels 
+    !
+    if(do_favre) then
+      !
+      ! Density-based averaging (Favre)
+      !
+      select case(idir)
+      case(1)
+        !$acc kernels
+        do k=1,nz
+          do j=1,ny
+            do i=1,nx
+              mm = start + i
+              !
+              p_avg    = 0.5_rp*(p(i,j,k)+p(i-qx,j-qy,k-qz))
+              rhop(mm) = rhop(mm) + p_dl_idir*rho_p(i,j,k)
+              p1d1(mm) = p1d1(mm) + p_dl_idir*rho_p(i,j,k)*p_avg 
+              p1d2(mm) = p1d2(mm) + p_dl_idir*rho_p(i,j,k)*p_avg**2 
+              !
+            enddo
+          enddo
+        enddo
+        !$acc end kernels 
+      case(2)
+        !$acc kernels
+        do k=1,nz
+          do j=1,ny
+            do i=1,nx
+              mm = start + j
+              !
+              p_avg    = 0.5_rp*(p(i,j,k)+p(i-qx,j-qy,k-qz))
+              rhop(mm) = rhop(mm) + p_dl_idir*rho_p(i,j,k)
+              p1d1(mm) = p1d1(mm) + p_dl_idir*rho_p(i,j,k)*p_avg 
+              p1d2(mm) = p1d2(mm) + p_dl_idir*rho_p(i,j,k)*p_avg**2 
+              !
+            enddo
+          enddo
+        enddo
+        !$acc end kernels 
+      case(3)
+        !$acc kernels
+        do k=1,nz
+          do j=1,ny
+            do i=1,nx
+              mm = start + k
+              !
+              p_avg    = 0.5_rp*(p(i,j,k)+p(i-qx,j-qy,k-qz))
+              rhop(mm) = rhop(mm) + p_dl_idir*rho_p(i,j,k)
+              p1d1(mm) = p1d1(mm) + p_dl_idir*rho_p(i,j,k)*p_avg 
+              p1d2(mm) = p1d2(mm) + p_dl_idir*rho_p(i,j,k)*p_avg**2 
+              !
+            enddo
+          enddo
+        enddo
+        !$acc end kernels 
+      end select
+      !
+      call mpi_allreduce(MPI_IN_PLACE,rhop(1),ng_idir,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
+      call mpi_allreduce(MPI_IN_PLACE,p1d1(1),ng_idir,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
+      call mpi_allreduce(MPI_IN_PLACE,p1d2(1),ng_idir,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
+      !
+      !$acc kernels
+      do mm=1,ng_idir
+        p1d1(mm) = p1d1(mm)/(rhop(mm))
+        p1d2(mm) = p1d2(mm)/(rhop(mm))
+      enddo
+      !$acc end kernels 
+      !
+    else
+      !
+      ! Volumetric-based averaging (no Favre)
+      !
+      select case(idir)
+      case(1)
+        !$acc kernels
+        do k=1,nz
+          do j=1,ny
+            do i=1,nx
+              mm = start + i
+              !
+              p_avg    = 0.5_rp*(p(i,j,k)+p(i-qx,j-qy,k-qz))
+              p1d1(mm) = p1d1(mm) + p_avg
+              p1d2(mm) = p1d2(mm) + p_avg**2
+              !
+            enddo
+          enddo
+        enddo
+        !$acc end kernels 
+      case(2)
+        !$acc kernels
+        do k=1,nz
+          do j=1,ny
+            do i=1,nx
+              mm = start + j
+              !
+              p_avg    = 0.5_rp*(p(i,j,k)+p(i-qx,j-qy,k-qz))
+              p1d1(mm) = p1d1(mm) + p_avg
+              p1d2(mm) = p1d2(mm) + p_avg**2
+              !
+            enddo
+          enddo
+        enddo
+        !$acc end kernels 
+      case(3)
+        !$acc kernels
+        do k=1,nz
+          do j=1,ny
+            do i=1,nx
+              mm = start + k
+              !
+              p_avg    = 0.5_rp*(p(i,j,k)+p(i-qx,j-qy,k-qz))
+              p1d1(mm) = p1d1(mm) + p_avg
+              p1d2(mm) = p1d2(mm) + p_avg**2
+              !
+            enddo
+          enddo
+        enddo
+        !$acc end kernels 
+      end select
+      !
+      call mpi_allreduce(MPI_IN_PLACE,p1d1(1),ng_idir,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
+      call mpi_allreduce(MPI_IN_PLACE,p1d2(1),ng_idir,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
+      !
+      !$acc kernels
+      do mm=1,ng_idir
+        p1d1(mm) = p1d1(mm)*factor2
+        p1d2(mm) = p1d2(mm)*factor2
+      enddo
+      !$acc end kernels 
+      !
+    endif
+    !
+    ! decide or not to averaging 
+    !
+    if(.not.do_avg) then
+      !$acc kernels
+      do mm=1,ng_idir
+        pout1(mm) = p1d1(mm)
+        pout2(mm) = p1d2(mm)
+      enddo
+      !$acc end kernels 
+    else
+      !$acc kernels
+      do mm=1,ng_idir
+        pout1(mm) = ((factor-1._rp)*pout1(mm)+p1d1(mm))/factor
+        pout2(mm) = ((factor-1._rp)*pout2(mm)+p1d2(mm))/factor
+      enddo
+      !$acc end kernels 
+    endif
+    pvol1 = sum(pout1)
+    pvol2 = sum(pout2)
+    !
+    ! print 
+    !  note: we put this condition on iout1d in order to ensure that the 
+    !        averaging frequency (iout_av) is indenpendent 
+    !        of the print frequency of the files (iout1d)
+    !
+    if(mod(istep,iout1d).eq.0) then
+      if(myid.eq.0) then
+        open(unit=iunit,file=fname)
+        do mm=1,ng_idir
+          write(iunit,'(3E15.7)') (mm-0.5_rp)*dl(idir),pout1(mm),pout2(mm)
+        enddo
+        close(iunit)
+      endif
+      pout1 = 0._rp
+      pout2 = 0._rp
+      pvol1 = 0._rp
+      pvol2 = 0._rp
+    endif
+    deallocate(p1d1,p1d2,rhop)
+    !
+    return
+  end subroutine time_sp_avg
+#endif
   !
   subroutine compute_vorticity(nx,ny,nz,dxi,dyi,dzi,nh_u,v,w,vor)
     !
@@ -542,5 +835,108 @@ module mod_post
     !
     return
   end subroutine mixed_variables
+  !
+  subroutine budget(datadir,nx,ny,nz,ngx,ngy,ngz,rho1,rho2,dx,dy,dz, &
+                    nh_u,u,v,w,rho,vof,time,istep)
+    !
+    implicit none
+    !
+    character(len=100), intent(in )                                     :: datadir
+    integer           , intent(in )                                     :: nx ,ny ,nz
+    integer           , intent(in )                                     :: ngx,ngy,ngz
+    real(rp)          , intent(in )                                     :: rho1,rho2
+    real(rp)          , intent(in )                                     :: dx,dy,dz
+    integer           , intent(in )                                     :: nh_u
+    real(rp)          , intent(in ), dimension(1-nh_u:,1-nh_u:,1-nh_u:) :: u,v,w
+    real(rp)          , intent(in ), dimension(     0:,     0:,     0:) :: rho
+    real(rp)          , intent(in ), dimension(     0:,     0:,     0:) :: vof
+    real(rp)          , intent(in )                                     :: time
+    integer           , intent(in )                                     :: istep
+    !
+    real(rp) :: ke_t,ke_1,ke_2,dvol,volt,vol_t1,vol_t2
+    integer  :: i,j,k,ip,jp,kp,im,jm,km
+#if defined(_OPENACC)
+    integer :: istat
+    attributes(managed) :: u,v,w,rho,vof
+#endif
+    !
+    real(rp), parameter :: eps = real(1e-12,rp)
+    ! 
+    volt = 1._rp*ngx*ngy*ngz
+    dvol = dx*dy*dz
+    !
+    vol_t1 = 0._rp
+    vol_t2 = 0._rp
+    !
+    ke_t = 0._rp
+    ke_1 = 0._rp
+    ke_2 = 0._rp
+    !
+    !$acc kernels
+    do k=1,nz
+      do j=1,ny
+        do i=1,nx
+          !
+          ip = i + 1
+          im = i - 1
+          jp = j + 1
+          jm = j - 1
+          kp = k + 1
+          km = k - 1
+          !
+          ! 1. volume
+          ! 
+          vol_t1 = vol_t1 + vof(i,j,k)
+          vol_t2 = vol_t2 + (1._rp-vof(i,j,k))
+          !
+          ! 2. kinetic energy
+          ! 
+          ke_t = ke_t + rho(i,j,k)*&
+          0.5_rp*(0.25_rp*(u(i,j,k)+u(im,j,k))**2 + 0.25_rp*(v(i,j,k)+v(i,jm,k))**2 + 0.25_rp*(w(i,j,k)+w(i,j,km))**2)
+          ke_1 = ke_1 + rho1*vof(i,j,k)*&
+          0.5_rp*(0.25_rp*(u(i,j,k)+u(im,j,k))**2 + 0.25_rp*(v(i,j,k)+v(i,jm,k))**2 + 0.25_rp*(w(i,j,k)+w(i,j,km))**2)
+          ke_2 = ke_2 + rho2*(1._rp-vof(i,j,k))*&
+          0.5_rp*(0.25_rp*(u(i,j,k)+u(im,j,k))**2 + 0.25_rp*(v(i,j,k)+v(i,jm,k))**2 + 0.25_rp*(w(i,j,k)+w(i,j,km))**2)
+          !
+        enddo
+      enddo
+    enddo
+    !$acc end kernels 
+    !
+    call mpi_allreduce(MPI_IN_PLACE,vol_t1,1,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
+    call mpi_allreduce(MPI_IN_PLACE,vol_t2,1,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
+    !
+    call mpi_allreduce(MPI_IN_PLACE,ke_t  ,1,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
+    call mpi_allreduce(MPI_IN_PLACE,ke_1  ,1,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
+    call mpi_allreduce(MPI_IN_PLACE,ke_2  ,1,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
+    !
+    ke_t = ke_t/volt
+    ke_1 = ke_1/(vol_t1+eps)
+    ke_2 = ke_2/(vol_t2+eps)
+    !
+    if(myid.eq.0) then
+      !
+      ! a. post-processing one fluid
+      !
+      open(92,file=trim(datadir)//'ke_t.out',position='append')
+      write(92,'(3E15.7)') 1._rp*istep,time,ke_t
+      close(92)
+      ! 
+      ! b1. phase 1
+      ! 
+      open(93,file=trim(datadir)//'ke_1.out',position='append')
+      write(93,'(4E15.7)') 1._rp*istep,time,vol_t1,ke_1
+      close(93)
+      ! 
+      ! b2. phase 2
+      !
+      open(94,file=trim(datadir)//'ke_2.out',position='append')
+      write(94,'(4E15.7)') 1._rp*istep,time,vol_t2,ke_2 
+      close(94)
+      !
+    endif
+    !
+    return
+  end subroutine budget
   ! 
 end module mod_post

@@ -4,7 +4,5 @@ uni			                 ! inivof
 0.0625 3. 3. 10.	                 ! xc, yc, zc, r
 P P  N N  N N		                 ! cbcvof
 0. 0. 0. 0. 0. 0. 	                 ! bcvof
-0. -9.81 0.  	  	                 ! gacc(1), gacc(2), gacc(3)
 0.0 				         ! sigma
-0. 0. 0. 		                 ! dpdl(1), dpdl(2), dpdl(3)
 T 100000                                 ! lateInit, i_lateInit

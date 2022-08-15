@@ -1,0 +1,38 @@
+  !
+  ! write_visu_2d(datadir,fname_bin,fname_log,varname,inorm,nslice,ng,time,istep,p)
+  !
+  ! saves field data into a binary file and appends information about the data to a file
+  ! the log file can be used to generate a xdmf file for visualization of field data
+  !
+  ! datadir   -> name of the directory where the data is saved
+  ! fname_bin -> name of the output binary file
+  ! fname_log -> name of the log file (each different plane that is saved should
+  !                                     correspond to a different log file)
+  ! varname   -> name of the variable that is saved
+  !              to create a vector, append _X _Y and _Z to the variable name, denoting the
+  !              three components of the vector field
+  ! inorm     -> plane is perpendicular to direction inorm (1, 2, or 3)
+  ! islice    -> plane is of constant index islice in direction inorm 
+  ! ng        -> array with the global number of points in each direction
+  ! time      -> physical time
+  ! istep     -> time step number
+  ! p         -> 3D input scalar field
+  !
+  ! modify the calls below as desired
+  !
+  call write_visu_2d(datadir,'vex_slice_fld_'//fldnum//'.bin','log_visu_2d_slice_1.out','Velocity_X', &
+                     1,ng(1)/2,ng,time,istep, &
+                     u(1:n(1),1:n(2),1:n(3)))
+  call write_visu_2d(datadir,'vey_slice_fld_'//fldnum//'.bin','log_visu_2d_slice_1.out','Velocity_Y', &
+                     1,ng(1)/2,ng,time,istep, &
+                     v(1:n(1),1:n(2),1:n(3)))
+  call write_visu_2d(datadir,'vez_slice_fld_'//fldnum//'.bin','log_visu_2d_slice_1.out','Velocity_Z', &
+                     1,ng(1)/2,ng,time,istep, &
+                     w(1:n(1),1:n(2),1:n(3)))
+  call write_visu_2d(datadir,'pre_slice_fld_'//fldnum//'.bin','log_visu_2d_slice_1.out','Pressure_P', &
+                     1,ng(1)/2,ng,time,istep, &
+                     p(1:n(1),1:n(2),1:n(3)))
+  !call write_visu_2d(datadir,'tmp_slice_fld_'//fldnum//'.bin','log_visu_2d_slice_1.out','Temperature', &
+  !                   1,ng(1)/2,ng,time,istep, &
+  !                   tmp(1:n(1),1:n(2),1:n(3)))
+

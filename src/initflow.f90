@@ -7,15 +7,13 @@ module mod_initflow
   use decomp_2d
   use mod_common_mpi, only: ierr,myid,ijk_start
   use mod_param     , only: pi,dx,dy,dz,ng, &
-                            is_forced, bulk_velx,bulk_vely,bulk_velz,&
-                            dpdl, small, &
+                            is_forced,bvel_x,bvel_y,bvel_z, &
+                            dpdl_x,dpdl_y,dpdl_z,small,bulk_ftype, &
 #if defined(_TURB_FORCING)
-                            u0_t, k0_t, abc, add_noise_abc, &
+                            u0_t, k0_t, abc_x, abc_y, abc_z, add_noise_abc, &
 #endif
-#if defined(_HEAT_TRANSFER)
-                            tl0,tg0, &
-#endif
-                            lx,ly,lz,is_wallturb,mu2,rho2
+                            lx,ly,lz,is_wallturb,wallturb_type
+  use mod_sanity    , only: flutas_error
   use mod_types
 #if defined(_OPENACC)
   use cudafor
@@ -25,15 +23,14 @@ module mod_initflow
   implicit none
   !
   private
-  public initflow, &
+  public  :: initflow, add_noise
 #if defined(_HEAT_TRANSFER)
-         inittmp, &
+  public  :: inittmp
 #endif
-         init_surf_tension,add_noise
   !
   contains
   !
-  subroutine initflow(inivel,nx,ny,nz,dims,nh_d,nh_u,nh_p,zclzi,dzclzi,dzflzi,u,v,w,p)
+  subroutine initflow(inivel,nx,ny,nz,dims,nh_d,nh_u,nh_p,rho_p,mu_p,zclzi,dzclzi,dzflzi,u,v,w,p)
     !
     ! computes initial conditions for the velocity and pressure field
     !
@@ -43,9 +40,11 @@ module mod_initflow
     integer         , intent(in )                                     :: nx,ny,nz
     integer         , intent(in ), dimension(3)                       :: dims
     integer         , intent(in )                                     :: nh_d,nh_u,nh_p
+    real(rp)        , intent(in )                                     :: rho_p,mu_p ! when we call initflow, we decide which phase
     real(rp)        , intent(in ), dimension(1-nh_d:)                 :: zclzi,dzclzi,dzflzi
     real(rp)        , intent(out), dimension(1-nh_u:,1-nh_u:,1-nh_u:) :: u,v,w
     real(rp)        , intent(out), dimension(1-nh_p:,1-nh_p:,1-nh_p:) :: p
+    !
     !@cuf attributes(managed) :: u, v, w, p, zclzi, dzclzi, dzflzi
     !
 #if defined(_TURB_FORCING)
@@ -54,7 +53,7 @@ module mod_initflow
     real(rp), allocatable, dimension(:) :: u1d
     real(rp) :: q
     real(rp) :: xc,yc,zc,xf,yf,zf
-    integer  :: i,j,k
+    integer  :: i,j,k,ijk_start_x,ijk_start_y,ijk_start_z
     logical  :: is_noise,is_mean
     real(rp) :: norm = 1._rp
     !
@@ -64,17 +63,31 @@ module mod_initflow
     is_noise = .false.
     is_mean  = .false.
     q = 0.5_rp
-    if (is_forced(1))               then
-      norm = bulk_velx
-    elseif (is_forced(2))           then
-      norm = bulk_vely
-    elseif (is_forced(3))           then 
-      norm = bulk_velz
-    elseif (abs(sum(dpdl)).ge.small) then
-      norm = ((-sum(dpdl)*lz/2._rp/rho2)**0.5*lz/2._rp/mu2/0.09)**(1._rp/0.88)* & !Re_tau
-              mu2/lz
-    else 
+    !
+    ijk_start_x = ijk_start(1)
+    ijk_start_y = ijk_start(2)
+    ijk_start_z = ijk_start(3)
+    !
+    if(any(is_forced(:))) then
+      !
+      select case(bulk_ftype)
+      case('cfr')
+        if(    is_forced(1)) then
+          norm = bvel_x
+        elseif(is_forced(2)) then
+          norm = bvel_y
+        elseif(is_forced(3)) then 
+          norm = bvel_z
+        endif
+      case('cpg')
+          norm = ((-(dpdl_x+dpdl_y+dpdl_z)*lz/2._rp/rho_p)**0.5*lz/2._rp/mu_p/0.09) 
+          norm = norm**(1._rp/0.88)*mu_p/lz ! compute norm to be consistent with the imposed dpdl_*
+      end select
+      !
+    else
+      !
       norm = 1._rp
+      !
     endif
     !
     select case(inivel)
@@ -99,7 +112,7 @@ module mod_initflow
     case('uni')
       u1d(:) = 1._rp
     case('log')
-      call log_profile(q,nz,nh_d,zclzi,mu2,rho2,lz,norm,u1d)
+      call log_profile(q,nz,nh_d,zclzi,mu_p,rho_p,lz,norm,u1d)
       is_noise = .true.
       is_mean  = .true.
     !case('hcl')
@@ -120,11 +133,11 @@ module mod_initflow
         do j=1,ny
           do i=1,nx
             !
-            zc = (k+ijk_start(3)-0.5_rp)*dz/lz*2.0_rp*pi
-            yc = (j+ijk_start(2)-0.5_rp)*dy/ly*2.0_rp*pi
-            yf = (j+ijk_start(2)-0.0_rp)*dy/ly*2.0_rp*pi
-            xc = (i+ijk_start(1)-0.5_rp)*dx/lx*2.0_rp*pi
-            xf = (i+ijk_start(1)-0.0_rp)*dx/lx*2.0_rp*pi
+            zc = (k+ijk_start_z-0.5_rp)*dz/lz*2.0_rp*pi
+            yc = (j+ijk_start_y-0.5_rp)*dy/ly*2.0_rp*pi
+            yf = (j+ijk_start_y-0.0_rp)*dy/ly*2.0_rp*pi
+            xc = (i+ijk_start_x-0.5_rp)*dx/lx*2.0_rp*pi
+            xf = (i+ijk_start_x-0.0_rp)*dx/lx*2.0_rp*pi
             !
             u(i,j,k) =  u0_t*sin(k0_t*xf)*cos(k0_t*yc)*cos(k0_t*zc)
             v(i,j,k) = -u0_t*cos(k0_t*xc)*sin(k0_t*yf)*cos(k0_t*zc)
@@ -148,15 +161,15 @@ module mod_initflow
         do j=1,ny
           do i=1,nx
             !
-            zc = (k+ijk_start(3)-0.5_rp)*dz/lz*2.0_rp*pi
-            yc = (j+ijk_start(2)-0.5_rp)*dy/ly*2.0_rp*pi
-            yf = (j+ijk_start(2)-0.0_rp)*dy/ly*2.0_rp*pi
-            xc = (i+ijk_start(1)-0.5_rp)*dx/lx*2.0_rp*pi
-            xf = (i+ijk_start(1)-0.0_rp)*dx/lx*2.0_rp*pi
+            zc = (k+ijk_start_z-0.5_rp)*dz/lz*2.0_rp*pi
+            yc = (j+ijk_start_y-0.5_rp)*dy/ly*2.0_rp*pi
+            yf = (j+ijk_start_y-0.0_rp)*dy/ly*2.0_rp*pi
+            xc = (i+ijk_start_x-0.5_rp)*dx/lx*2.0_rp*pi
+            xf = (i+ijk_start_x-0.0_rp)*dx/lx*2.0_rp*pi
             !
-            u(i,j,k) =  u0_t*(abc(1)*sin(k0_t*zc+add_sin) + abc(3)*cos(k0_t*yc+add_cos))
-            v(i,j,k) =  u0_t*(abc(2)*sin(k0_t*xc+add_sin) + abc(1)*cos(k0_t*zc+add_cos))
-            w(i,j,k) =  u0_t*(abc(3)*sin(k0_t*yc+add_sin) + abc(2)*cos(k0_t*xc+add_cos))
+            u(i,j,k) =  u0_t*(abc_x*sin(k0_t*zc+add_sin) + abc_z*cos(k0_t*yc+add_cos))
+            v(i,j,k) =  u0_t*(abc_y*sin(k0_t*xc+add_sin) + abc_x*cos(k0_t*zc+add_cos))
+            w(i,j,k) =  u0_t*(abc_z*sin(k0_t*yc+add_sin) + abc_y*cos(k0_t*xc+add_cos))
             p(i,j,k) = 0._rp!(cos(2._rp*xc)+cos(2._rp*yc))*(cos(2._rp*zc)+2._rp)/16._rp
             !
           enddo
@@ -165,13 +178,7 @@ module mod_initflow
       !$acc end kernels
 #endif
     case default
-      if(myid.eq.0) print*, 'ERROR: invalid name for initial velocity field'
-      if(myid.eq.0) print*, ''
-      if(myid.eq.0) print*, '*** Simulation abortited due to errors in the case file ***'
-      if(myid.eq.0) print*, '    check the file dns.in'
-      call decomp_2d_finalize
-      call MPI_FINALIZE(ierr)
-      call exit
+      call flutas_error('Error: invalid name of the initial velocity field. Simulation aborted. Check dns.in')
     end select
     !
     if((inivel.ne.'tgv').and.(inivel.ne.'abc')) then
@@ -189,11 +196,18 @@ module mod_initflow
       !$acc end kernels
     endif
     !
+    ! set the mean velocity
+    !
     if(is_mean) then
       call set_mean(nx,ny,nz,nh_d,dims,dzclzi,norm,u(1:nx,1:ny,1:nz))
     endif
-    if(is_wallturb.ne.0) then
-      if(is_wallturb.eq.1) then
+    !
+    ! add disturbance to the velocity for wall-bounded turbulence
+    !
+    if(is_wallturb) then
+      !
+      select case(wallturb_type)
+      case('hkv')
         !
         ! initialize a streamwise vortex pair for a fast transition
         ! to turbulence in a pressure-driven channel:
@@ -204,18 +218,19 @@ module mod_initflow
         !
         ! see Henningson and Kim, JFM 1991
         !
+        !!$acc kernels
         do k=1,nz
           do j=1,ny
             do i=1,nx
               !
               zc = 2._rp*zclzi(k) - 1._rp ! z rescaled to be between -1 and +1
               zf = 2._rp*(zclzi(k) + 0.5_rp*dzflzi(k)) - 1._rp
-              yc = ((ijk_start(2)+j-0.5_rp)*dy-0.5_rp*ly)*2._rp/lz
-              yf = ((ijk_start(2)+j-0.0_rp)*dy-0.5_rp*ly)*2._rp/lz
-              xc = ((ijk_start(1)+i-0.5_rp)*dx-0.5_rp*lx)*2._rp/lz
-              xf = ((ijk_start(1)+i-0.0_rp)*dx-0.5_rp*lx)*2._rp/lz
+              yc = ((ijk_start_y+j-0.5_rp)*dy-0.5_rp*ly)*2._rp/lz
+              yf = ((ijk_start_y+j-0.0_rp)*dy-0.5_rp*ly)*2._rp/lz
+              xc = ((ijk_start_x+i-0.5_rp)*dx-0.5_rp*lx)*2._rp/lz
+              xf = ((ijk_start_x+i-0.0_rp)*dx-0.5_rp*lx)*2._rp/lz
               !
-              u(i,j,k) = u1d(k)
+              !u(i,j,k) = u1d(k)
               v(i,j,k) =  1._rp * fz(zc)*dgxy(yf,xc)*norm*1.5_rp
               w(i,j,k) = -1._rp * gxy(yc,xc)*dfz(zf)*norm*1.5_rp
               p(i,j,k) = 0._rp
@@ -223,37 +238,40 @@ module mod_initflow
             enddo
           enddo
         enddo
-      elseif(is_wallturb.eq.2) then
+        !!$acc end kernels
+      case('tgv')
         !
-        ! Initialize turbulence using Taylor-Green vortices
+        ! trigger wall-bounded turbulence using Taylor-Green vortices
         !
+        !$acc kernels
         do k=1,nz
-          zc = (zclzi(k)                 )*2._rp*pi
-          zf = (zclzi(k)+0.5_rp*dzclzi(k))*2._rp*pi
           do j=1,ny
-            yc = (j+ijk_start(2)-0.5_rp)*dy/ly*2._rp*pi
-            yf = (j+ijk_start(2)-0.0_rp)*dy/ly*2._rp*pi
             do i=1,nx
-              xc = (i+ijk_start(1)-0.5_rp)*dx/lx*2._rp*pi
-              xf = (i+ijk_start(1)-0.0_rp)*dx/lx*2._rp*pi
+              !
+              zc = (zclzi(k)                 )*2._rp*pi
+              zf = (zclzi(k)+0.5_rp*dzclzi(k))*2._rp*pi
+              yc = (j+ijk_start_y-0.5_rp)*dy/ly*2._rp*pi
+              yf = (j+ijk_start_y-0.0_rp)*dy/ly*2._rp*pi
+              xc = (i+ijk_start_x-0.5_rp)*dx/lx*2._rp*pi
+              xf = (i+ijk_start_x-0.0_rp)*dx/lx*2._rp*pi
+              !
               !u(i,j,k) = u1d(k)
               v(i,j,k) =  sin(xc)*cos(yf)*cos(zc)*norm
               w(i,j,k) = -cos(xc)*sin(yc)*cos(zf)*norm
               p(i,j,k) = 0._rp!(cos(2.*xc)+cos(2.*yc))*(cos(2.*zc)+2.)/16.
+              !
             enddo
           enddo
         enddo
-      else
-       if(myid.eq.0) print*, 'Wrong setting specified for is_wallturb. &
-                              Please set 1 for Henningson and Kim vortices, &
-                              2 for Taylor-Green vortices or 0 to disable it.'
-       if(myid.eq.0) print*, 'Aborting...'
-       call MPI_FINALIZE(ierr)
-       call exit()
-      endif
-      !!$acc end kernels
+        !$acc end kernels
+      case default
+        call flutas_error('Wrong setting specified for is_wallturb. Option available: hkv or tgv')
+      end select
+      !
     endif
     deallocate(u1d)
+    !
+    ! add noise
     !
     if(is_noise) then
       call add_noise(nx,ny,nz,dims,123,0.5_rp,u(1:nx,1:ny,1:nz))
@@ -281,24 +299,35 @@ module mod_initflow
   end subroutine initflow
   !
 #if defined(_HEAT_TRANSFER)
-  subroutine inittmp(initmp,nx,ny,nz,nh_v,nh_t,dims,is_noise,norm_t,vof,tmp)
+  subroutine inittmp(initmp,nx,ny,nz,nh_t,dims,is_noise,norm_t, &
+#if defined(_USE_VOF)
+                     nh_v,vof, &
+#endif
+                     tmp)
     !
     ! computes initial conditions for the temperature field
+    !
+    use mod_param, only: tmp0
+#if defined(_USE_VOF)
+    use mod_param, only: tl0,tg0
+#endif
     !
     implicit none
     !
     character(len=3), intent(in )                                     :: initmp
     integer         , intent(in )                                     :: nx,ny,nz
-    integer         , intent(in )                                     :: nh_v,nh_t
+    integer         , intent(in )                                     :: nh_t
     integer         , intent(in ), dimension(3)                       :: dims
     logical         , intent(in )                                     :: is_noise
     real(rp)        , intent(in )                                     :: norm_t
+#if defined(_USE_VOF)
+    integer         , intent(in )                                     :: nh_v
     real(rp)        , intent(in ), dimension(1-nh_v:,1-nh_v:,1-nh_v:) :: vof
-    real(rp)        , intent(out), dimension(1-nh_t:,1-nh_t:,1-nh_t:) :: tmp
-#if defined(_OPENACC)
-    attributes(managed):: tmp,vof
+    !@cuf attributes(managed) :: vof
 #endif
+    real(rp)        , intent(out), dimension(1-nh_t:,1-nh_t:,1-nh_t:) :: tmp
     !
+    !@cuf attributes(managed) :: tmp
     integer :: i,j,k
     !
     select case(initmp)
@@ -307,12 +336,13 @@ module mod_initflow
       do k=1,nz
         do j=1,ny
           do i=1,nx
-            tmp(i,j,k) = tg0
+            tmp(i,j,k) = tmp0
           enddo
         enddo
       enddo
       !$acc end kernels
       !
+#if defined(_USE_VOF)
     case('sin')
       !$acc kernels
       do k=1,nz
@@ -323,15 +353,10 @@ module mod_initflow
         enddo
       enddo
       !$acc end kernels
+#endif
       !
     case default
-      if(myid.eq.0) print*, 'ERROR: invalid name for initial temperature field'
-      if(myid.eq.0) print*, ''
-      if(myid.eq.0) print*, '*** Simulation abortited due to ierrs in the case file ***'
-      if(myid.eq.0) print*, '    check heat_transfer.in'
-      call decomp_2d_finalize
-      call MPI_FINALIZE(ierr)
-      call exit
+      call flutas_error('Error: invalid name of the initial temperature field. Simulation aborted. Check heat_transfer.in')
     end select
     !
     if(is_noise)then
@@ -359,6 +384,7 @@ module mod_initflow
   end subroutine inittmp
 #endif   
   !
+#if defined(_USE_VOF)
   subroutine init_surf_tension(nx,ny,nz,dxi,dyi,dzi,nh_d,dzci,kappa,psi,rho, &
                                ssx_o,ssy_o,ssz_o,ssx,ssy,ssz)
     !
@@ -410,6 +436,7 @@ module mod_initflow
     !
     return
   end subroutine init_surf_tension
+#endif
   ! 
   subroutine add_noise(nx,ny,nz,dims,iseed,norm,p)
     !
@@ -425,6 +452,7 @@ module mod_initflow
     real(rp) :: rn
     integer  :: nxg,nyg,nzg
     integer  :: i,j,k,ii,jj,kk
+    integer  :: ijk_start_x,ijk_start_y,ijk_start_z
     !
     allocate(seed(64))
     seed(:) = iseed
@@ -438,9 +466,9 @@ module mod_initflow
       do j=1,nyg
         do i=1,nxg
           !
-          ii = i-ijk_start(1)
-          jj = j-ijk_start(2)
-          kk = k-ijk_start(3)
+          ii = i-ijk_start_x
+          jj = j-ijk_start_y
+          kk = k-ijk_start_z
           !
           call random_number(rn)
           if(ii.ge.1.and.ii.le.nx .and. &
@@ -471,6 +499,7 @@ module mod_initflow
     real(rp) :: rn
     integer  :: nxg,nyg,nzg
     integer  :: i,j,k,ii,jj,kk
+    integer  :: ijk_start_x,ijk_start_y,ijk_start_z
     !
     attributes(managed):: p
     !
@@ -485,9 +514,9 @@ module mod_initflow
       do j=1,nyg
         do i=1,nxg
           !
-          ii = i-ijk_start(1)
-          jj = j-ijk_start(2)
-          kk = k-ijk_start(3)
+          ii = i-ijk_start_x
+          jj = j-ijk_start_y
+          kk = k-ijk_start_z
           !
           rn = curand_uniform(h)
           if(ii.ge.1.and.ii.le.nx .and. &
@@ -594,20 +623,20 @@ module mod_initflow
     return
   end subroutine poiseuille
   !
-  subroutine log_profile(q,n,nh_d,zc,mu2,rho2,lref,uref,p)
+  subroutine log_profile(q,n,nh_d,zc,mu_p,rho_p,lref,uref,p)
     !
     implicit none
     !
     real(rp), intent(in )                     :: q
     integer , intent(in )                     :: n,nh_d
     real(rp), intent(in ), dimension(1-nh_d:) :: zc
-    real(rp), intent(in )                     :: mu2,rho2,lref,uref
+    real(rp), intent(in )                     :: mu_p,rho_p,lref,uref
     real(rp), intent(out), dimension(n)       :: p
     !
     real(rp) :: z,reb,retau ! z/lz and bulk Reynolds number
     integer  :: k
     !
-    reb = rho2*uref*lref/mu2
+    reb = rho_p*uref*lref/mu_p
     retau = 0.09_rp*reb**(0.88) ! from Pope's book
     do k=1,n/2
       z    = zc(k)*2._rp*retau!1._rp*((k-1)+q)/(1._rp*n)*2.*retau
@@ -623,24 +652,28 @@ module mod_initflow
   ! (explained above)
   !
   function fz(zc)
+  !!$acc routine(fz) seq
   real(rp), intent(in) :: zc
   real(rp) :: fz
     fz = ((1._rp-zc**2)**2)
   end function
   !
   function dfz(zc)
+  !!$acc routine(dfz) seq
   real(rp), intent(in) :: zc
   real(rp) :: dfz
     dfz = -4._rp*zc*((1._rp-zc**2)**2)
   end function
   !
   function gxy(xc,yc)
+  !!$acc routine(gxy) seq
   real(rp), intent(in) :: xc,yc
   real(rp) :: gxy
     gxy = yc*exp(-4._rp*(4._rp*xc**2+yc**2))
   end function
   !
   function dgxy(xc,yc)
+  !!$acc routine(dgxy) seq
   real(rp), intent(in) :: xc,yc
   real(rp) :: dgxy
     dgxy = exp(-4._rp*(4._rp*xc**2+yc**2))*(1._rp-8._rp*yc**2)

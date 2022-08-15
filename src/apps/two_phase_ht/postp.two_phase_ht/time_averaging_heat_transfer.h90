@@ -1,0 +1,44 @@
+!!!!!!!!!!!!!!!!
+!LIQUID <T> <T^2> 
+!!!!!!!!!!!!!!!!
+call time_tw_avg( avg_dir,do_avg,do_favre,(/0,0,0/),'data/post/time_averaging/tmp_avg_fld_'   //fldnum//'.out',    & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,nh_t,        &
+                  psi,rho,tmp,           &
+                  tmp_avg_l,tmp_sqr_l,tmp_vol_avg_l,tmp_vol_sqr_l                        )
+!!!!!!!!!!!!!!!!
+!LIQUID <uT> <vT> <wT> <(uT)^2> <(vT)^2> <(wT)^2> 
+!!!!!!!!!!!!!!!!
+call time_tw_avg( avg_dir,do_avg,do_favre,(/0,0,0/),'data/post/time_averaging/utmp_avg_fld_'   //fldnum//'.out',   & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,0,        &
+	          psi,rho,utmp,          &
+                  utmp_avg_l,utmp_sqr_l,utmp_vol_avg_l,utmp_vol_sqr_l                    )
+call time_tw_avg( avg_dir,do_avg,do_favre,(/0,0,0/),'data/post/time_averaging/vtmp_avg_fld_'   //fldnum//'.out',   & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,0,        &
+	          psi,rho,vtmp,          &
+                  vtmp_avg_l,vtmp_sqr_l,vtmp_vol_avg_l,vtmp_vol_sqr_l                    )
+call time_tw_avg( avg_dir,do_avg,do_favre,(/0,0,0/),'data/post/time_averaging/wtmp_avg_fld_'   //fldnum//'.out',   & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,0,        &
+	          psi,rho,wtmp,          &
+                  wtmp_avg_l,wtmp_sqr_l,wtmp_vol_avg_l,wtmp_vol_sqr_l                    )
+!!!!!!!!!!!!!!!!
+!GAS <T> <T^2> 
+!!!!!!!!!!!!!!!!
+call time_tw_avg( avg_dir,do_avg,do_favre,(/0,0,0/),'data/post/time_averaging/tmp_avg_fld_'   //fldnum//'_g.out',  & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,nh_t,        &
+	          (1.d0-psi),rho,tmp,    &
+                  tmp_avg_g,tmp_sqr_g,tmp_vol_avg_g,tmp_vol_sqr_g                )
+!!!!!!!!!!!!!!!!
+!GAS <uT> <vT> <wT> <(uT)^2> <(vT)^2> <(wT)^2> 
+!!!!!!!!!!!!!!!!
+call time_tw_avg( avg_dir,do_avg,do_favre,(/0,0,0/),'data/post/time_averaging/utmp_avg_fld_'   //fldnum//'_g.out', & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,0,        &
+	          (1.d0-psi),rho,utmp,   &
+                  utmp_avg_g,utmp_sqr_g,utmp_vol_avg_g,utmp_vol_sqr_g            )
+call time_tw_avg( avg_dir,do_avg,do_favre,(/0,0,0/),'data/post/time_averaging/vtmp_avg_fld_'   //fldnum//'_g.out', & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,0,        &
+	          (1.d0-psi),rho,vtmp,   &
+                  vtmp_avg_g,vtmp_sqr_g,vtmp_vol_avg_g,vtmp_vol_sqr_g            )
+call time_tw_avg( avg_dir,do_avg,do_favre,(/0,0,0/),'data/post/time_averaging/wtmp_avg_fld_'   //fldnum//'_g.out', & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,0,        &
+	          (1.d0-psi),rho,wtmp,   &
+                  wtmp_avg_g,wtmp_sqr_g,wtmp_vol_avg_g,wtmp_vol_sqr_g            )

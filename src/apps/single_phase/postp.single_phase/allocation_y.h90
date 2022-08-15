@@ -1,0 +1,23 @@
+allocate  ( u_avg_g(ng(2)), &
+            v_avg_g(ng(2)), &
+            w_avg_g(ng(2)), &
+            u_sqr_g(ng(2)), &
+            v_sqr_g(ng(2)), &
+            w_sqr_g(ng(2)), &
+            tmp_avg_g(ng(2)), &
+            tmp_sqr_g(ng(2)), &
+            utmp_avg_g(ng(2)), &
+            vtmp_avg_g(ng(2)), &
+            wtmp_avg_g(ng(2)), &
+            utmp_sqr_g(ng(2)), &
+            vtmp_sqr_g(ng(2)), &
+            wtmp_sqr_g(ng(2)), &
+            uv_avg_g(ng(2)), &
+            vw_avg_g(ng(2)), &
+            wu_avg_g(ng(2)), &
+            uv_sqr_g(ng(2)), &
+            vw_sqr_g(ng(2)), &
+            wu_sqr_g(ng(2)), &
+            vorx_avg_g(ng(2)), &
+            vorx_sqr_g(ng(2)))
+

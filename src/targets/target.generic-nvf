@@ -6,7 +6,7 @@ CPP_FLAGS := -cpp
 CC        := nvc++
 FC        := mpif90 
 ifeq ($(DO_DBG),1)
-  DBG       := -Minform=inform -Mchkstk -g -O0 -traceback -Mbounds
+  DBG       := -O0 -g -traceback -Mstandard -Minform=inform -Mbackslash -Mbounds -Mchkptr -Mchkstk
 else
   OPT       := -Minfo=accel -fast
 endif
@@ -22,9 +22,6 @@ LDFLAGS :=
 USE_NVTX = 0
 
 # Required for FFTW
-#FFTW_HOME := -I/home/sw-hackathons/opt/spack/linux-ubuntu18.04-broadwell/gcc-9.3.0/fftw-3.3.8-2s34e4b37yi4nlmfix2fccdftl4xd36i/include
-#LDFLAGS   += -L/home/sw-hackathons/opt/spack/linux-ubuntu18.04-broadwell/gcc-9.3.0/fftw-3.3.8-2s34e4b37yi4nlmfix2fccdftl4xd36i/lib -lfftw3
-
 FFTW_HOME := /data/nicolos/libraries/fftw-3.3.9
 LDFLAGS   += -L${FFTW_HOME}/lib -lfftw3
 

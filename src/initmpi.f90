@@ -82,7 +82,7 @@ module mod_initmpi
     call decomp_2d_init(ng(1),ng(2),ng(3),dims_in_aux(1),dims_in_aux(2),periods)
     myid = nrank
     ! 
-    ! set imax and jmax using autotuned processor grid dimensions
+    ! define dims based on the three possible decompositions
     !
     dims_xyz(1,1) = 1
     dims_xyz(2,1) = dims_in_aux(1)
@@ -114,6 +114,8 @@ module mod_initmpi
     !  a. _DECOMP_X: decomposition along y and z (NOT x!)
     !  b. _DECOMP_Y: decomposition along x and z (NOT y!)
     !  c. _DECOMP_Z: decomposition along x and y (NOT z!)
+    !
+    !  note: we typically use _DECOMP_X as it minimizes the number of transpose operations
     !
 #if defined(_DECOMP_X)
     dims(:)      = dims_xyz(:,1)

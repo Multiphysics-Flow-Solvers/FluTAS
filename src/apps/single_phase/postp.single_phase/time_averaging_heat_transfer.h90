@@ -1,0 +1,22 @@
+!!!!!!!!!!!!!!!!
+!GAS <T> <T^2> 
+!!!!!!!!!!!!!!!!
+call time_sp_avg( avg_dir,do_avg,do_favre,(/0,0,0/),'data/post/time_averaging/tmp_avg_fld_'   //fldnum//'_g.out',  & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_t,        &
+                  rho,tmp,    &
+                  tmp_avg_g,tmp_sqr_g,tmp_vol_avg_g,tmp_vol_sqr_g                )
+!!!!!!!!!!!!!!!!
+!GAS <uT> <vT> <wT> <(uT)^2> <(vT)^2> <(wT)^2> 
+!!!!!!!!!!!!!!!!
+call time_sp_avg( avg_dir,do_avg,do_favre,(/0,0,0/),'data/post/time_averaging/utmp_avg_fld_'   //fldnum//'_g.out', & 
+                  n,ng,istep,i_av,iout1d,nh_d,0,        &
+	          rho,utmp,   &
+                  utmp_avg_g,utmp_sqr_g,utmp_vol_avg_g,utmp_vol_sqr_g            )
+call time_sp_avg( avg_dir,do_avg,do_favre,(/0,0,0/),'data/post/time_averaging/vtmp_avg_fld_'   //fldnum//'_g.out', & 
+                  n,ng,istep,i_av,iout1d,nh_d,0,        &
+	          rho,vtmp,   &
+                  vtmp_avg_g,vtmp_sqr_g,vtmp_vol_avg_g,vtmp_vol_sqr_g            )
+call time_sp_avg( avg_dir,do_avg,do_favre,(/0,0,0/),'data/post/time_averaging/wtmp_avg_fld_'   //fldnum//'_g.out', & 
+                  n,ng,istep,i_av,iout1d,nh_d,0,        &
+	          rho,wtmp,   &
+                  wtmp_avg_g,wtmp_sqr_g,wtmp_vol_avg_g,wtmp_vol_sqr_g            )

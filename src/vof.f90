@@ -9,7 +9,7 @@ module mod_vof
   ! Journal of Computational Physics 231.5 (2012): 2328-2358.
   !
   use mod_types, only: rp
-  !@cuf  use cudafor
+  !@cuf use cudafor
   !
   implicit none
   !
@@ -18,7 +18,7 @@ module mod_vof
   real(rp), parameter :: small = 10._rp**(-16)
   !
   real(rp), parameter :: rmm = 0.5_rp*(1.0_rp-1.0_rp/sqrt(3.0_rp)), &
-                          rpp = 0.5_rp*(1.0_rp+1.0_rp/sqrt(3.0_rp))
+                         rpp = 0.5_rp*(1.0_rp+1.0_rp/sqrt(3.0_rp))
   !
   ! Those are constants 
   real(rp), parameter, dimension(3,3) :: xmm = reshape((/0.0_rp,rmm,rmm, &
@@ -35,11 +35,11 @@ module mod_vof
                                                         rpp,rpp,0.0_rp/),shape(xpp))
   !@cuf attributes(managed) :: xmm, xmp, xpm, xpp
   !
-  real(rp), allocatable, dimension(:,:,:) :: dvof1,dvof2,dvof3,flux
-  !@cuf attributes(managed) :: dvof1,dvof2,dvof3,flux
+  real(rp), allocatable, dimension(:,:,:) :: dvof1,dvof2,flux
+  !@cuf attributes(managed) :: dvof1,dvof2,flux
   !
   private
-  public  :: advvof,update_vof,update_property,initvof,alloc_vof_var
+  public  :: advvof,update_vof,update_property,initvof
   !
   contains
   !
@@ -68,8 +68,13 @@ module mod_vof
     real(rp) :: dli1, dli2, dli3
     integer :: i,j,k,im,jm,km
     integer :: n1, n2, n3
-    integer :: dir
     !@cuf attributes(managed) :: nor, cur, kappa, d_thinc, vof, ug, vg, wg, dzc, dzf
+    !
+    if( (.not.allocated(dvof1)) .or. (.not.allocated(dvof2)) .or. (.not.allocated(flux) ) ) then
+      allocate (dvof1(0:n(1)+1,0:n(2)+1,0:n(3)+1), & 
+                dvof2(0:n(1)+1,0:n(2)+1,0:n(3)+1), &
+                flux( 0:n(1)+0,0:n(2)+0,0:n(3)+0))
+    endif
     !
     dl(:) = dli(:)**(-1)
     dli1 = dli(1)
@@ -106,9 +111,11 @@ module mod_vof
     !
     ! update vof
     !
+#if !defined(_TWOD)
     call clip_vof(n,dvof1)
     call boundp(cbcvof,n,bcvof,nh_d,+1,halo,dl,dzc,dzf,dvof1)
     call update_vof(n,dli,nh_d,dzc,dzf,+1,halo,dvof1,nor,cur,kappa,d_thinc)
+#endif
     !
     ! flux in y
     !
@@ -143,7 +150,7 @@ module mod_vof
         do i=1,n1
           km = k-1
           !
-          dvof3(i,j,k) = (dvof2(i,j,k)-(flux(i,j,k)-flux(i,j,km))*dli3)/(1.0_rp-dt*dli3*(wg(i,j,k)-wg(i,j,km)))
+          vof(i,j,k) = (dvof2(i,j,k)-(flux(i,j,k)-flux(i,j,km))*dli3)/(1.0_rp-dt*dli3*(wg(i,j,k)-wg(i,j,km)))
           !
         enddo
       enddo
@@ -152,9 +159,9 @@ module mod_vof
     !
     ! update vof
     !
-    call clip_vof(n,dvof3)
-    !call boundp(cbcvof,n,bcvof,nh_d,+1,halo,dl,dzc,dzf,dvof3) ! it can be skipped
-    !call update_vof(n,dli,nh_d,dzc,dzf,+1,halo,dvof3,nor,cur,kappa,d_thinc) ! it can be skipped
+    call clip_vof(n,vof)
+    !call boundp(cbcvof,n,bcvof,nh_d,+1,halo,dl,dzc,dzf,vof) ! it can be skipped
+    !call update_vof(n,dli,nh_d,dzc,dzf,+1,halo,vof,nor,cur,kappa,d_thinc) ! it can be skipped
     !
     ! divergence correction step
     !
@@ -166,19 +173,9 @@ module mod_vof
           jm = j-1
           im = i-1
           !
-          vof(i,j,k) = dvof3(i,j,k) - dt*( dvof1(i,j,k)*dli1*(ug(i,j,k)-ug(im,j,k)) + &
-                                           dvof2(i,j,k)*dli2*(vg(i,j,k)-vg(i,jm,k)) + &
-                                           dvof3(i,j,k)*dli3*(wg(i,j,k)-wg(i,j,km)) )
-          !
-#if defined(_PHASE_CHANGE)  
-          vof(i,j,k) = vof(i,j,k)/( &
-                                    1.0_rp-dt*( &
-                                              dli1*(ug(i,j,k)-ug(im,j,k)) + &
-                                              dli2*(vg(i,j,k)-vg(i,jm,k)) + &
-                                              dli3*(wg(i,j,k)-wg(i,j,km))   &
-                                            ) &
-                                  )
-#endif
+          vof(i,j,k) = vof(i,j,k) - dt*( dvof1(i,j,k)*dli1*(ug(i,j,k)-ug(im,j,k)) + &
+                                         dvof2(i,j,k)*dli2*(vg(i,j,k)-vg(i,jm,k)) + &
+                                           vof(i,j,k)*dli3*(wg(i,j,k)-wg(i,j,km)) )
           !
         enddo
       enddo
@@ -512,6 +509,9 @@ module mod_vof
           !
           ! compute the normal vector
           !
+          nor(i,j,k,1) = 0._rp
+          nor(i,j,k,2) = 0._rp
+          nor(i,j,k,3) = 0._rp
           !$acc loop seq
           do p=1,8
             nor(i,j,k,1) = nor(i,j,k,1) + 0.125_rp*mx(p)
@@ -703,15 +703,12 @@ module mod_vof
           !
           ! compute the normal vector
           !
-          !!! [NOTE] nor(:,:,:,1:3) never set to 0 before accumulate new values?
-          !!! [NOTE] what if use nor1, nor2, nor3 and then assign nor(:,:,:,1:3)
-
-          !!! nor(i,j,k,1) = nor(i,j,k,1) + 0.125_rp*mx1 + 0.125_rp*mx2 + 0.125_rp*mx3 + 0.125_rp*mx4 + 0.125_rp*mx5 + 0.125_rp*mx6 + 0.125_rp*mx7 + 0.125_rp*mx8
-          !!! nor(i,j,k,2) = nor(i,j,k,2) + 0.125_rp*my1 + 0.125_rp*my2 + 0.125_rp*my3 + 0.125_rp*my4 + 0.125_rp*my5 + 0.125_rp*my6 + 0.125_rp*my7 + 0.125_rp*my8
-          !!! nor(i,j,k,3) = nor(i,j,k,3) + 0.125_rp*mz1 + 0.125_rp*mz2 + 0.125_rp*mz3 + 0.125_rp*mz4 + 0.125_rp*mz5 + 0.125_rp*mz6 + 0.125_rp*mz7 + 0.125_rp*mz8
-          nor(i,j,k,1) = nor(i,j,k,1) + 0.125_rp*(mx1 + mx2 + mx3 + mx4 + mx5 + mx6 + mx7 + mx8)
-          nor(i,j,k,2) = nor(i,j,k,2) + 0.125_rp*(my1 + my2 + my3 + my4 + my5 + my6 + my7 + my8)
-          nor(i,j,k,3) = nor(i,j,k,3) + 0.125_rp*(mz1 + mz2 + mz3 + mz4 + mz5 + mz6 + mz7 + mz8)
+          !nor(i,j,k,1) = nor(i,j,k,1) + 0.125_rp*(mx1 + mx2 + mx3 + mx4 + mx5 + mx6 + mx7 + mx8)
+          !nor(i,j,k,2) = nor(i,j,k,2) + 0.125_rp*(my1 + my2 + my3 + my4 + my5 + my6 + my7 + my8)
+          !nor(i,j,k,3) = nor(i,j,k,3) + 0.125_rp*(mz1 + mz2 + mz3 + mz4 + mz5 + mz6 + mz7 + mz8)
+          nor(i,j,k,1) = 0.125_rp*(mx1 + mx2 + mx3 + mx4 + mx5 + mx6 + mx7 + mx8)
+          nor(i,j,k,2) = 0.125_rp*(my1 + my2 + my3 + my4 + my5 + my6 + my7 + my8)
+          nor(i,j,k,3) = 0.125_rp*(mz1 + mz2 + mz3 + mz4 + mz5 + mz6 + mz7 + mz8)
           !
           norm         = sqrt(nor(i,j,k,1)**2+nor(i,j,k,2)**2+nor(i,j,k,3)**2+small)
           nor(i,j,k,1) = nor(i,j,k,1)/norm
@@ -1800,22 +1797,6 @@ module mod_vof
     return
   end subroutine solve_quad
   !
-  subroutine alloc_vof_var(n1,n2,n3)
-    !
-    implicit none
-    !
-    integer, intent(in) :: n1,n2,n3
-    !
-    allocate (dvof1(0:n1 + 1, 0:n2  + 1, 0:n3 + 1), &
-              dvof2(0:n1 + 1, 0:n2  + 1, 0:n3 + 1), &
-              dvof3(0:n1 + 1, 0:n2  + 1, 0:n3 + 1),   &
-               flux(0:n1 + 1, 0:n2  + 1, 0:n3 + 1))
-    !
-    ! TODO: prefetching
-    !
-    return 
-  end subroutine alloc_vof_var
-  !
   ! code devoted to the VoF initialization
   !
 #if defined(_INIT_MONTECARLO)
@@ -1834,9 +1815,9 @@ module mod_vof
   !
   subroutine initvof(n,dli,vof)
     !
-    use decomp_2d
     use mod_param     , only: inivof,lx,ly,lz,cbcvof,xc,yc,zc,r,nbub
     use mod_common_mpi, only: myid,ierr,ijk_start
+    use mod_sanity    , only: flutas_error
     !
     ! computes initial conditions for the VoF field
     !
@@ -2222,13 +2203,7 @@ module mod_vof
       !$acc end kernels
       !
     case default  
-      if(myid.eq.0) print*, 'ERROR: invalid name for initial VoF field'
-      if(myid.eq.0) print*, ''
-      if(myid.eq.0) print*, '*** Simulation abortited due to errors in the case file ***'
-      if(myid.eq.0) print*, '    check vof.in'
-      call decomp_2d_finalize
-      call MPI_FINALIZE(ierr)
-      call exit
+      call flutas_error('Error: invalid name of the initial VoF field. Simulation aborted. Check vof.in')
     end select
     return
   end subroutine initvof

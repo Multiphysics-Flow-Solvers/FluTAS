@@ -4,7 +4,7 @@
 module mod_fft
   !
   use iso_c_binding , only: C_INT
-  use mod_common_mpi, only: ierr
+  use mod_common_mpi, only: ierr,myid
   use mod_fftw_param
   use mod_param     , only: pi
   use mod_types
@@ -877,7 +877,10 @@ module mod_fft
         end select
       end if
     case default
-       ! ERROR  (trap this in sanity check in sanity.f90)
+      if(myid.eq.0) print*, "In GPU, only PP, DD, and NN boundary conditions for pressure are supported"
+      if(myid.eq.0) print*, "Check dns.in"
+      call MPI_FINALIZE(ierr)
+      call exit
     end select
     !
     return

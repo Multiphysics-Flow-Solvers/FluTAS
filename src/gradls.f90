@@ -165,7 +165,6 @@ module mod_gradls
     endif
     !
 #if defined(_OPENACC)
-    !
     !$acc kernels
 #else
     !$OMP PARALLEL DO DEFAULT(none) &

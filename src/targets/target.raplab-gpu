@@ -27,8 +27,6 @@ USE_NVTX ?= 1
 # Required for FFTW
 FFTW_HOME := /home/sw-hackathons/opt/spack/linux-ubuntu18.04-broadwell/nvhpc-21.11/fftw-3.3.9-2r7hclsmc76lwod4ms6466po7d4xbxot
 LDFLAGS   += -L${FFTW_HOME}/lib -lfftw3
-#LDFLAGS   +=-L${FFTW_HOME}/lib -lfftw3_omp -lfftw3
-#LDFLAGS   +=-L${FFTW_HOME}/lib -lfftw3_threads -lfftw3
 
 FFLAGS    += -cuda -acc -gpu=cc70,cuda11.0,lineinfo -cudalib=cufft,curand -Minfo=accel 
 DFLAGS    += -D_EPHC

@@ -75,26 +75,26 @@ module mod_load
     return
   end subroutine load
   !
-  subroutine load_scalar(io,filename,time,istep,timeold)
+  subroutine load_scalar(io,filename,time,istep,dto)
     !
     implicit none
     !
     character(len=1), intent(in   ) :: io
     character(len=*), intent(in   ) :: filename
     integer         , intent(inout) :: istep
-    real(rp)        , intent(inout) :: time, timeold
+    real(rp)        , intent(inout) :: time, dto
     !
     integer :: fh
     !
     select case(io)
     case('r')
       open(88,file=filename,status='old',action='read')
-      read(88,*) time, timeold, istep
+      read(88,*) time, dto, istep
       close(88)
     case('w')
       if(myid.eq.0) then
         open (88, file=filename)
-        write(88,'(2E15.7, 1I9.8)') time, timeold, istep
+        write(88,'(2E15.7, 1I9.8)') time, dto, istep
         close(88)
       endif
     end select

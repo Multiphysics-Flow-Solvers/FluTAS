@@ -1,0 +1,10 @@
+# Physics switches
+CONSTANT_COEFFS_POISSON ?= 1
+USE_VOF                 ?= 1
+VOF_DBG                 ?= 0
+HEAT_TRANSFER           ?= 0
+INIT_MONTECARLO         ?= 0
+DO_POSTPROC             ?= 0
+TURB_FORCING            ?= 0
+
+MAIN_SRC=main__two_phase_inc_isot.f90

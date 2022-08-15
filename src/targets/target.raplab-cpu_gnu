@@ -25,9 +25,6 @@ USE_NVTX ?= 0
 # Required for FFTW
 FFTW_HOME := /home/sw-hackathons/opt/spack/linux-ubuntu18.04-broadwell/gcc-9.3.0/fftw-3.3.8-2s34e4b37yi4nlmfix2fccdftl4xd36i
 LDFLAGS   += -L${FFTW_HOME}/lib -lfftw3
-#LDFLAGS   +=-L${FFTW_HOME}/lib -lfftw3_omp -lfftw3
-#LDFLAGS   +=-L${FFTW_HOME}/lib -lfftw3_threads -lfftw3
-
 
 # Required for INIT_MONTECARLO
 #GSL_LIB   += -L~/lib -lgsl -lgslcblas -lm -lstdc++

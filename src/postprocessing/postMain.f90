@@ -1,25 +1,4 @@
-!
-!        CCCCCCCCCCCCC                    NNNNNNNN        NNNNNNNN    SSSSSSSSSSSSSSS
-!     CCC::::::::::::C                    N:::::::N       N::::::N  SS:::::::::::::::S
-!   CC:::::::::::::::C                    N::::::::N      N::::::N S:::::SSSSSS::::::S
-!  C:::::CCCCCCCC::::C                    N:::::::::N     N::::::N S:::::S     SSSSSSS
-! C:::::C       CCCCCC   aaaaaaaaaaaaa    N::::::::::N    N::::::N S:::::S
-!C:::::C                 a::::::::::::a   N:::::::::::N   N::::::N S:::::S
-!C:::::C                 aaaaaaaaa:::::a  N:::::::N::::N  N::::::N  S::::SSSS
-!C:::::C                          a::::a  N::::::N N::::N N::::::N   SS::::::SSSSS
-!C:::::C                   aaaaaaa:::::a  N::::::N  N::::N:::::::N     SSS::::::::SS
-!C:::::C                 aa::::::::::::a  N::::::N   N:::::::::::N        SSSSSS::::S
-!C:::::C                a::::aaaa::::::a  N::::::N    N::::::::::N             S:::::S
-! C:::::C       CCCCCC a::::a    a:::::a  N::::::N     N:::::::::N             S:::::S
-!  C:::::CCCCCCCC::::C a::::a    a:::::a  N::::::N      N::::::::N SSSSSSS     S:::::S
-!   CC:::::::::::::::C a:::::aaaa::::::a  N::::::N       N:::::::N S::::::SSSSSS:::::S
-!     CCC::::::::::::C  a::::::::::aa:::a N::::::N        N::::::N S:::::::::::::::SS
-!        CCCCCCCCCCCCC   aaaaaaaaaa  aaaa NNNNNNNN         NNNNNNN  SSSSSSSSSSSSSSS
-!-------------------------------------------------------------------------------------
-! CaNS -- Canonical Navier-Stokes Solver
-! Pedro Costa (p.simoes.costa@gmail.com)
-!-------------------------------------------------------------------------------------
-program cans
+program flutas
   use iso_c_binding  , only: C_PTR
   use mpi
   use decomp_2d
@@ -337,4 +316,4 @@ enddo
   call decomp_2d_finalize
   call MPI_FINALIZE(ierr)
   call exit
-end program cans
+end program flutas

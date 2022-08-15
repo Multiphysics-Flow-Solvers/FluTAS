@@ -1,0 +1,44 @@
+!!!!!!!!!!!!!!!!
+!VOID FRACTION  <1-psi> <(1-psi)^2>
+!!!!!!!!!!!!!!!!
+call time_tw_avg( avg_dir,do_avg,do_favre,(/0,0,0/),'data/post/time_averaging/void_avg_fld_'   //fldnum//'.out',   & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,nh_v,        &
+                  (0.d0*psi),rho,(1.d0 - psi),&
+                  void_avg,void_sqr,void_vol_avg,void_vol_sqr                    )
+!!!!!!!!!!!!!!!!
+!LIQUID <u> <v> <w> <u^2> <v^2> <w^2>
+!!!!!!!!!!!!!!!!
+call time_tw_avg( avg_dir,do_avg,do_favre,(/1,0,0/),'data/post/time_averaging/u_avg_fld_'   //fldnum//'.out',      & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,nh_u,        &
+	          psi,rho,u,             &
+                  u_avg_l,u_sqr_l,u_vol_avg_l,u_vol_sqr_l                                )
+call time_tw_avg( avg_dir,do_avg,do_favre,(/0,1,0/),'data/post/time_averaging/v_avg_fld_'   //fldnum//'.out',      & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,nh_u,        &
+	          psi,rho,v,             &
+                  v_avg_l,v_sqr_l,v_vol_avg_l,v_vol_sqr_l                                )
+call time_tw_avg( avg_dir,do_avg,do_favre,(/0,0,1/),'data/post/time_averaging/w_avg_fld_'   //fldnum//'.out',      & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,nh_u,        &
+	          psi,rho,w,             &
+                  w_avg_l,w_sqr_l,w_vol_avg_l,w_vol_sqr_l                                )
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!LIQUID <uv> <vw> <wu> <(uv)^2> <(vw)^2> <(wu)^2>
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+call time_tw_avg( avg_dir,do_avg,do_favre,(/0,0,0/),'data/post/time_averaging/uv_avg_fld_'   //fldnum//'.out',     & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,0,        &
+	          psi,rho,uv,            &
+                  uv_avg_l,uv_sqr_l,uv_vol_avg_l,uv_vol_sqr_l                            )
+call time_tw_avg( avg_dir,do_avg,do_favre,(/0,0,0/),'data/post/time_averaging/vw_avg_fld_'   //fldnum//'.out',     & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,0,        &
+	          psi,rho,vw,            &
+                  vw_avg_l,vw_sqr_l,vw_vol_avg_l,vw_vol_sqr_l                            )
+call time_tw_avg( avg_dir,do_avg,do_favre,(/0,0,0/),'data/post/time_averaging/wu_avg_fld_'   //fldnum//'.out',     & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,0,        &
+	          psi,rho,wu,            &
+                  wu_avg_l,wu_sqr_l,wu_vol_avg_l,wu_vol_sqr_l                            )
+!!!!!!!!!!!!!!!!
+!LIQUID <vorx> <vorx^2>
+!!!!!!!!!!!!!!!!
+call time_tw_avg( avg_dir,do_avg,do_favre,(/0,0,0/),'data/post/time_averaging/vorx_avg_fld_'   //fldnum//'.out',   & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,0,        &
+	          psi,rho,vorx,          &
+                  vorx_avg_l,vorx_sqr_l,vorx_vol_avg_l,vorx_vol_sqr_l                    )

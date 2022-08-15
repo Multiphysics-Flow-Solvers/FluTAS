@@ -3,19 +3,30 @@
 !
 module mod_output
   !
+  ! note: this output module serves for including generic input/output 
+  !       subroutines that are usefull for all the different applications:
+  !          --> plot one observable (out0d);
+  !          --> plot one observable over a line (out1d);
+  !          --> plot one observable over a plane (out2d);
+  !          --> plot one observable over the entire computational domain (out3d);
+  !       
+  ! We recommend to include the postprocessing routines in the following location:
+  !   --> If the routine is application-dependent include in apps/<YOUR_APPLICATION>/postp.<YOUR_APPLICATION>
+  !   --> If it can serve many applications include in postprocessing/post.f90
+  !
+  ! Remember to add a comment on what the subroutine is doing
+  !
   use mpi
   use decomp_2d_io
   use mod_common_mpi, only: ierr,myid,ipencil,ijk_start
   use mod_types
+  !@cuf use mod_common_mpi, only: mydev
+  !@cuf use cudafor
   !
   implicit none
   !
   private
-  public  :: out0d,out1d,out1d_2,out2d,out3d, &
-             write_visu_2d,write_visu_3d
-#if defined(_TURB_FORCING)
-  public  :: budget
-#endif
+  public  :: out0d,out1d,out2d,out3d,write_visu_2d,write_visu_3d
   !
   contains
   !
@@ -54,11 +65,15 @@ module mod_output
     ! over two domain directions
     !
     ! fname -> name of the file
-    ! n     -> size of the input array
-    ! idir  -> direction of the profile
-    ! z     -> z coordinate (grid is non-uniform in z)
-    ! dzlzi -> dz/lz weight of a grid cell for averaging over z
-    ! p     -> 3D input scalar field
+    ! n     -> number of points in each computational subdomain
+    ! dims  -> number of computational subdomains along the parallelized directions
+    ! dl    -> spacing along x, y and z
+    ! idir  -> direction along which we print the profile (the other two set are averaged directions)
+    ! nh_d  -> number of halo points for the non uniform spacing along z
+    ! nh_p  -> number of halo points for the generic 3D input scalar field
+    ! z     -> global z coordinate (grid is non-uniform in z)
+    ! dzlzi -> dz/lz weight of a grid cell for averaging over z (it is sufficient to provide the local spacing)
+    ! p     -> generic 3D input scalar field which we want to average
     !
     implicit none
     !
@@ -71,77 +86,98 @@ module mod_output
     real(rp)        , intent(in), dimension(1-nh_p:,1-nh_p:,1-nh_p:) :: p
     !
     real(rp), allocatable, dimension(:) :: p1d
-    integer, dimension(3) :: ng
-    integer :: i,j,k,ii,jj,kk
+    integer :: ngx,ngy,ngz,nx,ny,nz,start,ng_idir
+    integer :: i,j,k,ii,jj,kk,mm
     integer :: iunit
+    !@cuf integer :: istat
+    !@cuf attributes(managed) :: z,dzlzi,p 
     !
-    ng(:) = n(:)*dims(:)
-    iunit = 10
+    iunit   = 10
+    ngx     = n(1)*dims(1)
+    ngy     = n(2)*dims(2)
+    ngz     = n(3)*dims(3)
+    ng_idir = n(idir)*dims(idir)
+    nx      = n(1)
+    ny      = n(2)
+    nz      = n(3)
+    start   = ijk_start(idir)
+    !
+    allocate(p1d(ng_idir))
+    !
+    ! first, set to zero
+    !
+    !$acc kernels
+    do mm=1,ng_idir
+      p1d(mm) = 0._rp
+    enddo
+    !$acc end kernels 
+    !
     select case(idir)
     case(3)
-      allocate(p1d(ng(3)))
-      p1d(:) = 0._rp
-      do k=1,n(3)
-        kk = ijk_start(3) + k
-        p1d(kk) = 0._rp
-        do j=1,n(2)
-          do i=1,n(1)
-            p1d(kk) = p1d(kk) + p(i,j,k)
+      !$acc kernels
+      do k=1,nz
+        do j=1,ny
+          do i=1,nx
+            mm = start + k
+            !
+            p1d(mm) = p1d(mm) + p(i,j,k)
+            !
           enddo
         enddo
       enddo
-      call mpi_allreduce(MPI_IN_PLACE,p1d(1),ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      p1d(:) = p1d(:)/(1.*ng(1)*ng(2))
+      !$acc end kernels 
+      call mpi_allreduce(MPI_IN_PLACE,p1d(1),ng_idir,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
       if(myid.eq.0) then
         open(unit=iunit,file=fname)
-        do kk=1,ng(3)
-          write(iunit,'(2E15.7)') z(kk),p1d(kk)
+        do kk=1,ngz
+          write(iunit,'(2E15.7)') z(kk),p1d(kk)/(1._rp*ngx*ngy)
         enddo
         close(iunit)
       endif
     case(2)
-      allocate(p1d(ng(2)))
-      p1d(:) = 0._rp
-      do j=1,n(2)
-        jj = ijk_start(2) + j
-        p1d(jj) = 0._rp
-        do k=1,n(3)
-          do i=1,n(1)
-            p1d(jj) = p1d(jj) + p(i,j,k)*dzlzi(k)
+      !$acc kernels
+      do k=1,nz
+        do j=1,ny
+          do i=1,nx
+            mm = start + j
+            !
+            p1d(mm) = p1d(mm) + p(i,j,k)*dzlzi(k)
+            !
           enddo
         enddo
       enddo
-      call mpi_allreduce(MPI_IN_PLACE,p1d(1),ng(2),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      p1d(:) = p1d(:)/(1.*ng(1))
+      !$acc end kernels
+      call mpi_allreduce(MPI_IN_PLACE,p1d(1),ng_idir,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
       if(myid.eq.0) then
         open(unit=iunit,file=fname)
-        do jj=1,ng(2)
-          write(iunit,'(2E15.7)') (jj-0.5_rp)*dl(2),p1d(jj)
+        do jj=1,ngy
+          write(iunit,'(2E15.7)') (jj-0.5_rp)*dl(2),p1d(jj)/ngy
         enddo
         close(iunit)
       endif
     case(1)
-      allocate(p1d(ng(1)))
-      p1d(:) = 0._rp
-      do i=1,n(1)
-        ii = ijk_start(1) + i
-        p1d(ii) = 0._rp
-        do k=1,n(3)
-          do j=1,n(2)
-            p1d(ii) = p1d(ii) + p(i,j,k)*dzlzi(k)
+      !$acc kernels
+      do k=1,nz
+        do j=1,ny
+          do i=1,nx
+            mm = start + i
+            !
+            p1d(mm) = p1d(mm) + p(i,j,k)*dzlzi(k)
+            !
           enddo
         enddo
       enddo
-      call mpi_allreduce(MPI_IN_PLACE,p1d(1),ng(1),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      p1d(:) = p1d(:)/(1.*ng(2))
+      !$acc end kernels 
+      call mpi_allreduce(MPI_IN_PLACE,p1d(1),ng_idir,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
       if(myid.eq.0) then
         open(unit=iunit,file=fname)
-        do ii=1,ng(1)
-          write(iunit,'(2E15.7)') (ii-0.5_rp)*dl(1),p1d(ii)
+        do ii=1,ngx
+          write(iunit,'(2E15.7)') (ii-0.5_rp)*dl(1),p1d(ii)/ngy
         enddo
         close(iunit)
       endif
     end select
+    !
     deallocate(p1d)
     !
     return
@@ -206,350 +242,6 @@ module mod_output
     return
   end subroutine out3d
   !
-  subroutine out1d_2(fname,n,dims,idir,nh_d,nh_u,z,u,v,w) ! e.g. for a channel with streamwise dir in x
-    !
-    implicit none
-    !
-    character(len=*), intent(in)                                     :: fname
-    integer         , intent(in), dimension(3)                       :: n,dims
-    integer         , intent(in)                                     :: idir
-    integer         , intent(in)                                     :: nh_d,nh_u
-    real(rp)        , intent(in), dimension(1-nh_d:)                 :: z
-    real(rp)        , intent(in), dimension(1-nh_u:,1-nh_u:,1-nh_u:) :: u,v,w
-    !
-    real(rp), allocatable, dimension(:) :: um,vm,wm,u2,v2,w2,uw
-    integer, dimension(3) :: ng
-    integer :: i,j,k,kk
-    integer :: iunit
-    integer :: q
-    !
-    ng(:) = n(:)*dims(:)
-    iunit = 10
-    select case(idir)
-    case(3)
-      q = ng(3)
-      allocate(um(0:q+1),vm(0:q+1),wm(0:q+1),u2(0:q+1),v2(0:q+1),w2(0:q+1),uw(0:q+1))
-      um(:) = 0._rp
-      vm(:) = 0._rp
-      wm(:) = 0._rp
-      u2(:) = 0._rp
-      v2(:) = 0._rp
-      w2(:) = 0._rp
-      uw(:) = 0._rp
-      do k=1,n(3)
-        kk = ijk_start(3) + k
-        um(kk) = 0._rp
-        vm(kk) = 0._rp
-        wm(kk) = 0._rp
-        u2(kk) = 0._rp
-        v2(kk) = 0._rp
-        w2(kk) = 0._rp
-        uw(kk) = 0._rp
-        do j=1,n(2)
-          do i=1,n(1)
-            um(kk) = um(kk) + u(i,j,k)
-            vm(kk) = vm(kk) + v(i,j,k)
-            wm(kk) = wm(kk) + 0.50_rp*(w(i,j,k-1) + w(i,j,k))
-            u2(kk) = u2(kk) + u(i,j,k)**2
-            v2(kk) = v2(kk) + v(i,j,k)**2
-            w2(kk) = w2(kk) + 0.50_rp*(w(i,j,k)**2+w(i,j,k-1)**2)
-            uw(kk) = uw(kk) + 0.25_rp*(u(i-1,j,k) + u(i,j,k))* &
-                                   (w(i,j,k-1) + w(i,j,k))
-          enddo
-        enddo
-      enddo
-      call mpi_allreduce(MPI_IN_PLACE,um(1),ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      call mpi_allreduce(MPI_IN_PLACE,vm(1),ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      call mpi_allreduce(MPI_IN_PLACE,wm(1),ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      call mpi_allreduce(MPI_IN_PLACE,u2(1),ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      call mpi_allreduce(MPI_IN_PLACE,v2(1),ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      call mpi_allreduce(MPI_IN_PLACE,w2(1),ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      call mpi_allreduce(MPI_IN_PLACE,uw(1),ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      um(:) = um(:)/(1.*ng(1)*ng(2))
-      vm(:) = vm(:)/(1.*ng(1)*ng(2))
-      wm(:) = wm(:)/(1.*ng(1)*ng(2))
-      u2(:) = sqrt(u2(:)/(1.*ng(1)*ng(2)) - um(:)**2)
-      v2(:) = sqrt(v2(:)/(1.*ng(1)*ng(2)) - vm(:)**2)
-      w2(:) = sqrt(w2(:)/(1.*ng(1)*ng(2)) - wm(:)**2)
-      uw(:) = uw(:)/(1.*ng(1)*ng(2)) - um(:)*wm(:)
-      if(myid.eq.0) then
-        open(unit=iunit,file=fname)
-        do kk=1,ng(3)
-          write(iunit,'(8E15.7)') z(kk),um(kk),vm(kk),wm(kk), &
-                                        u2(kk),v2(kk),w2(kk), &
-                                        uw(kk)
-        enddo
-        close(iunit)
-      endif
-      deallocate(um,vm,wm,u2,v2,w2,uw)
-    case(2)
-    case(1)
-    end select
-    !
-    return
-  end subroutine out1d_2
-  !
-  subroutine out2d_2(fname,n,dims,dl,idir,nh_d,nh_u,z,u,v,w) ! e.g. for a duct
-    !
-    implicit none
-    !
-    character(len=*), intent(in)                                     :: fname
-    integer         , intent(in), dimension(3)                       :: n,dims
-    real(rp)        , intent(in), dimension(3      )                 :: dl
-    integer         , intent(in)                                     :: idir
-    integer         , intent(in)                                     :: nh_d,nh_u
-    real(rp)        , intent(in), dimension(1-nh_d:)                 :: z
-    real(rp)        , intent(in), dimension(1-nh_u:,1-nh_u:,1-nh_u:) :: u,v,w
-    !
-    real(rp), allocatable, dimension(:,:) :: um,vm,wm,u2,v2,w2,uv,uw,vw
-    real(rp) :: x,y
-    integer, dimension(3) :: ng
-    integer  :: i,j,k,ii,jj,kk
-    integer  :: iunit
-    integer  :: p,q
-    !
-    ng(:) = n(:)*dims(:)
-    iunit = 10
-    select case(idir) ! streamwise direction
-    case(3)
-    case(2)
-      p = ng(1)
-      q = ng(3)
-      allocate(um(p,q),vm(p,q),wm(p,q),u2(p,q),v2(p,q),w2(p,q),uv(p,q),vw(p,q))
-      !
-      um(:,:) = 0._rp
-      vm(:,:) = 0._rp
-      wm(:,:) = 0._rp
-      u2(:,:) = 0._rp
-      v2(:,:) = 0._rp
-      w2(:,:) = 0._rp
-      uv(:,:) = 0._rp
-      vw(:,:) = 0._rp
-      do k=1,n(3)
-        kk = ijk_start(3) + k
-        do i=1,n(1)
-          ii = ijk_start(1) + i
-          um(ii,kk) = 0._rp
-          vm(ii,kk) = 0._rp
-          wm(ii,kk) = 0._rp
-          u2(ii,kk) = 0._rp
-          v2(ii,kk) = 0._rp
-          w2(ii,kk) = 0._rp
-          vw(ii,kk) = 0._rp
-          uv(ii,kk) = 0._rp
-          do j=1,n(2)
-            um(ii,kk) = um(ii,kk) + 0.50_rp*(u(i-1,j,k)+u(i,j,k))
-            vm(ii,kk) = vm(ii,kk) + v(i,j,k)
-            wm(ii,kk) = wm(ii,kk) + 0.50_rp*(w(i,j,k-1)+w(i,j,k))
-            u2(ii,kk) = u2(ii,kk) + 0.50_rp*(u(i-1,j,k)**2+u(i,j,k)**2)
-            v2(ii,kk) = v2(ii,kk) + v(i,j,k)**2
-            w2(ii,kk) = w2(ii,kk) + 0.50_rp*(w(i,j,k-1)**2+w(i,j,k)**2)
-            vw(ii,kk) = vw(ii,kk) + 0.25_rp*(v(i,j-1,k) + v(i,j,k))* &
-                                            (w(i,j,k-1) + w(i,j,k))
-            uv(ii,kk) = uv(ii,kk) + 0.25_rp*(u(i-1,j,k) + u(i,j,k))* &
-                                            (v(i,j-1,k) + v(i,j,k))
-          enddo
-        enddo
-      enddo
-      call mpi_allreduce(MPI_IN_PLACE,um(1,1),ng(1)*ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      call mpi_allreduce(MPI_IN_PLACE,vm(1,1),ng(1)*ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      call mpi_allreduce(MPI_IN_PLACE,wm(1,1),ng(1)*ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      call mpi_allreduce(MPI_IN_PLACE,u2(1,1),ng(1)*ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      call mpi_allreduce(MPI_IN_PLACE,v2(1,1),ng(1)*ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      call mpi_allreduce(MPI_IN_PLACE,w2(1,1),ng(1)*ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      call mpi_allreduce(MPI_IN_PLACE,vw(1,1),ng(1)*ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      call mpi_allreduce(MPI_IN_PLACE,uv(1,1),ng(1)*ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      um(:,:) =      um(:,:)/(1.*ng(2))
-      vm(:,:) =      vm(:,:)/(1.*ng(2))
-      wm(:,:) =      wm(:,:)/(1.*ng(2))
-      u2(:,:) = sqrt(u2(:,:)/(1.*ng(2)) - um(:,:)**2)
-      v2(:,:) = sqrt(v2(:,:)/(1.*ng(2)) - vm(:,:)**2)
-      w2(:,:) = sqrt(w2(:,:)/(1.*ng(2)) - wm(:,:)**2)
-      vw(:,:) =      vw(:,:)/(1.*ng(2)) - vm(:,:)*wm(:,:)
-      uv(:,:) =      uv(:,:)/(1.*ng(2)) - um(:,:)*vm(:,:)
-      if(myid.eq.0) then
-        open(unit=iunit,file=fname)
-        do kk=1,ng(3)
-          do ii=1,ng(1)
-            x = (ii-0.50_rp)*dl(1)
-            write(iunit,'(10E15.7)') x,z(kk),um(ii,kk),vm(ii,kk),wm(ii,kk), &
-                                             u2(ii,kk),v2(ii,kk),w2(ii,kk), &
-                                             vw(ii,kk),uv(ii,kk)
-          enddo
-        enddo
-        close(iunit)
-      endif
-      deallocate(um,vm,wm,u2,v2,w2,vw,uv)
-    case(1)
-      p = ng(2)
-      q = ng(3)
-      allocate(um(p,q),vm(p,q),wm(p,q),u2(p,q),v2(p,q),w2(p,q),uv(p,q),uw(p,q))
-      !
-      um(:,:) = 0._rp
-      vm(:,:) = 0._rp
-      wm(:,:) = 0._rp
-      u2(:,:) = 0._rp
-      v2(:,:) = 0._rp
-      w2(:,:) = 0._rp
-      uv(:,:) = 0._rp
-      uw(:,:) = 0._rp
-      do k=1,n(3)
-        kk = ijk_start(3) + k
-        do j=1,n(2)
-          jj = ijk_start(2) + j
-          um(jj,kk) = 0._rp
-          vm(jj,kk) = 0._rp
-          wm(jj,kk) = 0._rp
-          u2(jj,kk) = 0._rp
-          v2(jj,kk) = 0._rp
-          w2(jj,kk) = 0._rp
-          uv(jj,kk) = 0._rp
-          uw(jj,kk) = 0._rp
-          do i=1,n(1)
-            um(jj,kk) = um(jj,kk) + u(i,j,k)
-            vm(jj,kk) = vm(jj,kk) + 0.50_rp*(v(i,j-1,k)+v(i,j,k))
-            wm(jj,kk) = wm(jj,kk) + 0.50_rp*(w(i,j,k-1)+w(i,j,k))
-            u2(jj,kk) = u2(jj,kk) + u(i,j,k)**2
-            v2(jj,kk) = v2(jj,kk) + 0.50_rp*(v(i,j-1,k)**2+v(i,j,k)**2)
-            w2(jj,kk) = w2(jj,kk) + 0.50_rp*(w(i,j,k-1)**2+w(i,j,k)**2)
-            uv(jj,kk) = uv(jj,kk) + 0.25_rp*(u(i-1,j,k) + u(i,j,k))* &
-                                            (v(i,j-1,k) + v(i,j,k))
-            uw(jj,kk) = uw(jj,kk) + 0.25_rp*(u(i-1,j,k) + u(i,j,k))* &
-                                            (w(i,j,k-1) + w(i,j,k))
-          enddo
-        enddo
-      enddo
-      call mpi_allreduce(MPI_IN_PLACE,um(1,1),ng(1)*ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      call mpi_allreduce(MPI_IN_PLACE,vm(1,1),ng(1)*ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      call mpi_allreduce(MPI_IN_PLACE,wm(1,1),ng(1)*ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      call mpi_allreduce(MPI_IN_PLACE,u2(1,1),ng(1)*ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      call mpi_allreduce(MPI_IN_PLACE,v2(1,1),ng(1)*ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      call mpi_allreduce(MPI_IN_PLACE,w2(1,1),ng(1)*ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      call mpi_allreduce(MPI_IN_PLACE,uv(1,1),ng(1)*ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      call mpi_allreduce(MPI_IN_PLACE,uw(1,1),ng(1)*ng(3),MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-      um(:,:) =      um(:,:)/(1.*ng(2))
-      vm(:,:) =      vm(:,:)/(1.*ng(2))
-      wm(:,:) =      wm(:,:)/(1.*ng(2))
-      u2(:,:) = sqrt(u2(:,:)/(1.*ng(2)) - um(:,:)**2)
-      v2(:,:) = sqrt(v2(:,:)/(1.*ng(2)) - vm(:,:)**2)
-      w2(:,:) = sqrt(w2(:,:)/(1.*ng(2)) - wm(:,:)**2)
-      uv(:,:) =      uv(:,:)/(1.*ng(2)) - um(:,:)*vm(:,:)
-      uw(:,:) =      uw(:,:)/(1.*ng(2)) - um(:,:)*wm(:,:)
-      if(myid.eq.0) then
-        open(unit=iunit,file=fname)
-        do kk=1,ng(3)
-          do jj=1,ng(2)
-            y = (jj-0.50_rp)*dl(2)
-            write(iunit,'(10E15.7)') y,z(kk),um(jj,kk),vm(jj,kk),wm(jj,kk), &
-                                             u2(jj,kk),v2(jj,kk),w2(jj,kk), &
-                                             uv(jj,kk),uw(jj,kk)
-          enddo
-        enddo
-        close(iunit)
-      endif
-      deallocate(um,vm,wm,u2,v2,w2,vw,uv)
-    end select
-    !
-    return
-  end subroutine out2d_2
-  !
-  subroutine budget(datadir,nx,ny,nz,ngx,ngy,ngz,rho1,rho2,dx,dy,dz, &
-                    nh_u,u,v,w,rho,vof,time,istep)
-    !
-    implicit none
-    !
-    character(len=100), intent(in )                                     :: datadir
-    integer           , intent(in )                                     :: nx ,ny ,nz
-    integer           , intent(in )                                     :: ngx,ngy,ngz
-    real(rp)          , intent(in )                                     :: rho1,rho2
-    real(rp)          , intent(in )                                     :: dx,dy,dz
-    integer           , intent(in )                                     :: nh_u
-    real(rp)          , intent(in ), dimension(1-nh_u:,1-nh_u:,1-nh_u:) :: u,v,w
-    real(rp)          , intent(in ), dimension(     0:,     0:,     0:) :: rho
-    real(rp)          , intent(in ), dimension(     0:,     0:,     0:) :: vof
-    real(rp)          , intent(in )                                     :: time
-    integer           , intent(in )                                     :: istep
-    !
-    real(rp) :: ke_t,ke_1,ke_2,dvol,volt,vol_t1,vol_t2
-    integer  :: i,j,k,ip,jp,kp,im,jm,km
-    !
-    real(rp), parameter :: eps = real(1e-12,rp)
-    ! 
-    volt = 1._rp*ngx*ngy*ngz
-    dvol = dx*dy*dz
-    !
-    vol_t1 = 0._rp
-    vol_t2 = 0._rp
-    !
-    ke_t = 0._rp
-    ke_1 = 0._rp
-    ke_2 = 0._rp
-    !
-    do k=1,nz
-      do j=1,ny
-        do i=1,nx
-          !
-          ip = i + 1
-          im = i - 1
-          jp = j + 1
-          jm = j - 1
-          kp = k + 1
-          km = k - 1
-          !
-          ! 1. volume
-          ! 
-          vol_t1 = vol_t1 + vof(i,j,k)
-          vol_t2 = vol_t2 + (1._rp-vof(i,j,k))
-          !
-          ! 2. kinetic energy
-          ! 
-          ke_t = ke_t + rho(i,j,k)*&
-          0.5_rp*(0.25_rp*(u(i,j,k)+u(im,j,k))**2 + 0.25_rp*(v(i,j,k)+v(i,jm,k))**2 + 0.25_rp*(w(i,j,k)+w(i,j,km))**2)
-          ke_1 = ke_1 + rho1*vof(i,j,k)*&
-          0.5_rp*(0.25_rp*(u(i,j,k)+u(im,j,k))**2 + 0.25_rp*(v(i,j,k)+v(i,jm,k))**2 + 0.25_rp*(w(i,j,k)+w(i,j,km))**2)
-          ke_2 = ke_2 + rho2*(1._rp-vof(i,j,k))*&
-          0.5_rp*(0.25_rp*(u(i,j,k)+u(im,j,k))**2 + 0.25_rp*(v(i,j,k)+v(i,jm,k))**2 + 0.25_rp*(w(i,j,k)+w(i,j,km))**2)
-          !
-        enddo
-      enddo
-    enddo
-    !
-    call mpi_allreduce(MPI_IN_PLACE,vol_t1,1,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-    call mpi_allreduce(MPI_IN_PLACE,vol_t2,1,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-    !
-    call mpi_allreduce(MPI_IN_PLACE,ke_t  ,1,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-    call mpi_allreduce(MPI_IN_PLACE,ke_1  ,1,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-    call mpi_allreduce(MPI_IN_PLACE,ke_2  ,1,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-    !
-    ke_t = ke_t/volt
-    ke_1 = ke_1/(vol_t1+eps)
-    ke_2 = ke_2/(vol_t2+eps)
-    !
-    if(myid.eq.0) then
-      !
-      ! a. post-processing one fluid
-      !
-      open(92,file=trim(datadir)//'ke_t.out',position='append')
-      write(92,'(3E15.7)') 1._rp*istep,time,ke_t
-      close(92)
-      ! 
-      ! b1. phase 1
-      ! 
-      open(93,file=trim(datadir)//'ke_1.out',position='append')
-      write(93,'(4E15.7)') 1._rp*istep,time,vol_t1,ke_1
-      close(93)
-      ! 
-      ! b2. phase 2
-      !
-      open(94,file=trim(datadir)//'ke_2.out',position='append')
-      write(94,'(4E15.7)') 1._rp*istep,time,vol_t2,ke_2 
-      close(94)
-      !
-    endif
-    !
-    return
-  end subroutine budget
-  !
   subroutine write_log_output(fname,fname_fld,varname,nmin,nmax,nskip,time,istep)
     !
     ! appends information about a saved binary file to a log file
@@ -565,19 +257,23 @@ module mod_output
     ! istep     -> time step number
     !
     implicit none
-    character(len=*), intent(in) :: fname,fname_fld,varname
-    integer , intent(in), dimension(3) :: nmin,nmax,nskip
-    real(rp), intent(in)               :: time
-    integer , intent(in)               :: istep
+    !
+    character(len=*), intent(in)               :: fname,fname_fld,varname
+    integer         , intent(in), dimension(3) :: nmin,nmax,nskip
+    real(rp)        , intent(in)               :: time
+    integer         , intent(in)               :: istep
+    !
     character(len=100) :: cfmt
     integer :: iunit
     !
     write(cfmt, '(A)') '(A,A,A,9i5,E15.7,i7)'
-    if (myid  ==  0) then
+    if(myid  ==  0) then
       open(newunit=iunit,file=fname,position='append')
       write(iunit,trim(cfmt)) trim(fname_fld),' ',trim(varname),nmin,nmax,nskip,time,istep
       close(iunit)
-    end if
+    endif
+    !
+    return
   end subroutine write_log_output
   !
   subroutine write_visu_3d(datadir,fname_bin,fname_log,varname,nmin,nmax,nskip,time,istep,p)
@@ -585,14 +281,17 @@ module mod_output
     ! wraps the calls of out3d and write_log_output into the same subroutine
     !
     implicit none
-    character(len=*), intent(in)          :: datadir,fname_bin,fname_log,varname
-    integer , intent(in), dimension(3)    :: nmin,nmax,nskip
-    real(rp), intent(in)                  :: time
-    integer , intent(in)                  :: istep
-    real(rp), intent(in), dimension(:,:,:) :: p
+    !
+    character(len=*), intent(in)                   :: datadir,fname_bin,fname_log,varname
+    integer         , intent(in), dimension(3)     :: nmin,nmax,nskip
+    real(rp)        , intent(in)                   :: time
+    integer         , intent(in)                   :: istep
+    real(rp)        , intent(in), dimension(:,:,:) :: p
     !
     call out3d(trim(datadir)//trim(fname_bin),nskip,p)
     call write_log_output(trim(datadir)//trim(fname_log),trim(fname_bin),trim(varname),nmin,nmax,nskip,time,istep)
+    !
+    return
   end subroutine write_visu_3d
   !
   subroutine write_visu_2d(datadir,fname_bin,fname_log,varname,inorm,nslice,ng,time,istep,p)
@@ -600,13 +299,14 @@ module mod_output
     ! wraps the calls of out2d and write-log_output into the same subroutine
     !
     implicit none
-    character(len=*), intent(in)          :: datadir,fname_bin,fname_log,varname
-    integer , intent(in)                  :: inorm,nslice
-    integer , intent(in), dimension(3)    :: ng
-    real(rp), intent(in)                  :: time
-    integer , intent(in)                  :: istep
-    real(rp), intent(in), dimension(:,:,:) :: p
-    integer , dimension(3) :: nmin_2d,nmax_2d
+    !
+    character(len=*), intent(in)                   :: datadir,fname_bin,fname_log,varname
+    integer         , intent(in)                   :: inorm,nslice
+    integer         , intent(in), dimension(3)     :: ng
+    real(rp)        , intent(in)                   :: time
+    integer         , intent(in)                   :: istep
+    real(rp)        , intent(in), dimension(:,:,:) :: p
+    integer         , dimension(3)                 :: nmin_2d,nmax_2d
     !
     call out2d(trim(datadir)//trim(fname_bin),inorm,nslice,p)
     select case(inorm)
@@ -621,5 +321,8 @@ module mod_output
       nmax_2d(:) = [ng(1),ng(2),nslice]
     end select
     call write_log_output(trim(datadir)//trim(fname_log),trim(fname_bin),trim(varname),nmin_2d,nmax_2d,[1,1,1],time,istep)
+    !
+    return
   end subroutine write_visu_2d
+  !
 end module mod_output

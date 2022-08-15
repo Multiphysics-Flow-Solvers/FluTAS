@@ -1,0 +1,37 @@
+!!!!!!!!!!!!!!!!
+!GAS <u> <v> <w> <u^2> <v^2> <w^2>
+!!!!!!!!!!!!!!!!
+call time_tw_avg( avg_dir,do_avg,do_favre,(/1,0,0/),'data/post/time_averaging/u_avg_fld_'   //fldnum//'_g.out',    & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,nh_u,        &
+        	  (1.d0-psi),rho,u,      &
+                  u_avg_g,u_sqr_g,u_vol_avg_g,u_vol_sqr_g                        )
+call time_tw_avg( avg_dir,do_avg,do_favre,(/0,1,0/),'data/post/time_averaging/v_avg_fld_'   //fldnum//'_g.out',    & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,nh_u,        &
+	          (1.d0-psi),rho,v,      &
+                  v_avg_g,v_sqr_g,v_vol_avg_g,v_vol_sqr_g                        )
+call time_tw_avg( avg_dir,do_avg,do_favre,(/0,0,1/),'data/post/time_averaging/w_avg_fld_'   //fldnum//'_g.out',    & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,nh_u,        &
+	          (1.d0-psi),rho,w,      &
+                  w_avg_g,w_sqr_g,w_vol_avg_g,w_vol_sqr_g                        )
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!GAS <uv> <vw> <wu> <(uv)^2> <(vw)^2> <(wu)^2>
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+call time_tw_avg( avg_dir,do_avg,do_favre,(/0,0,0/),'data/post/time_averaging/uv_avg_fld_'   //fldnum//'_g.out',   & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,0,        &
+	          (1.d0-psi),rho,uv,     &
+                  uv_avg_g,uv_sqr_g,uv_vol_avg_g,uv_vol_sqr_g                    )
+call time_tw_avg( avg_dir,do_avg,do_favre,(/0,0,0/),'data/post/time_averaging/vw_avg_fld_'   //fldnum//'_g.out',   & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,0,        &
+	          (1.d0-psi),rho,vw,     &
+                  vw_avg_g,vw_sqr_g,vw_vol_avg_g,vw_vol_sqr_g                    )
+call time_tw_avg( avg_dir,do_avg,do_favre,(/0,0,0/),'data/post/time_averaging/wu_avg_fld_'   //fldnum//'_g.out',   & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,0,        &
+	          (1.d0-psi),rho,wu,     &
+                  wu_avg_g,wu_sqr_g,wu_vol_avg_g,wu_vol_sqr_g                    )
+!!!!!!!!!!!!!!!!
+!GAS <vorx> <vorx^2>
+!!!!!!!!!!!!!!!!
+call time_tw_avg( avg_dir,do_avg,do_favre,(/0,0,0/),'data/post/time_averaging/vorx_avg_fld_'  //fldnum//'_g.out', & 
+                  n,ng,istep,i_av,iout1d,nh_d,nh_v,0,        &
+	          (1.d0-psi),rho,vorx,   &
+                  vorx_avg_g,vorx_sqr_g,vorx_vol_avg_g,vorx_vol_sqr_g            )

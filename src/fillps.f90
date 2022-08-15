@@ -13,37 +13,30 @@ module mod_fillps
   !
   contains
   !
-  subroutine fillps(nx,ny,nz,nh_d,nh_u,dxi,dyi,dzi,dzci,dzfi,dti,rho0,up,vp,wp,p)
+  subroutine fillps(nx,ny,nz,nh_d,nh_u,dxi,dyi,dzi,dzfi,dti,rho0,u,v,w,p)
     !
     implicit none
     !
     integer , intent(in )                                     :: nx,ny,nz
     integer , intent(in )                                     :: nh_d,nh_u
     real(rp), intent(in )                                     :: dxi,dyi,dzi
-    real(rp), intent(in ), dimension(1-nh_d:)                 :: dzci,dzfi
+    real(rp), intent(in ), dimension(1-nh_d:)                 :: dzfi
     real(rp), intent(in )                                     :: dti,rho0
-    real(rp), intent(in ), dimension(1-nh_u:,1-nh_u:,1-nh_u:) :: up,vp,wp
+    real(rp), intent(in ), dimension(1-nh_u:,1-nh_u:,1-nh_u:) :: u,v,w
     real(rp), intent(out), dimension(0:,0:,0:)                :: p
     !
-    real(rp), dimension(1-nh_d:nz+nh_d) :: dtidzfi
     real(rp) :: dtidxi,dtidyi
     integer  :: i,j,k,im,jm,km
-    !@cuf attributes(managed) :: p, up, vp, wp, dtidzfi, dzci, dzfi
+    !@cuf attributes(managed) :: p, u, v, w, dzfi
     !
     dtidxi = dti*dxi
     dtidyi = dti*dyi
-    ! [TODO] Fuse into main loop below
-    !$acc kernels
-    do k=1-nh_d,nz+nh_d
-      dtidzfi(k) = dti*dzfi(k)
-    enddo
-    !$acc end kernels
     !
 #if defined(_OPENACC)
     !$acc kernels
 #else
     !$OMP PARALLEL DO DEFAULT(none) &
-    !$OMP SHARED(n,p,up,vp,wp,dtidzfi,dtidyi,dtidxi) &
+    !$OMP SHARED(nx,ny,nz,rho0,p,u,v,w,dtidxi,dtidyi,dti,dzci) &
     !$OMP PRIVATE(i,j,k,im,jm,km)
 #endif
     do k=1,nz
@@ -55,9 +48,9 @@ module mod_fillps
           km = k-1
           !
           p(i,j,k) = &
-                     ((wp(i,j,k)-wp(i,j,km))*dtidzfi(k)+ &
-                      (vp(i,j,k)-vp(i,jm,k))*dtidyi    + &
-                      (up(i,j,k)-up(im,j,k))*dtidxi    )
+                     ((w(i,j,k)-w(i,j,km))*dti*dzfi(k) + &
+                      (v(i,j,k)-v(i,jm,k))*dtidyi      + &
+                      (u(i,j,k)-u(im,j,k))*dtidxi      )
           !
 #if defined(_CONSTANT_COEFFS_POISSON)
           p(i,j,k) = p(i,j,k)*rho0

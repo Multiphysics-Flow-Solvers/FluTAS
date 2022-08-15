@@ -1,0 +1,47 @@
+allocate  ( u_avg_g(ng(1)), &
+            v_avg_g(ng(1)), &
+            w_avg_g(ng(1)), &
+            u_avg_l(ng(1)), &
+            v_avg_l(ng(1)), &
+            w_avg_l(ng(1)), &
+            u_sqr_g(ng(1)), &
+            v_sqr_g(ng(1)), &
+            w_sqr_g(ng(1)), &
+            u_sqr_l(ng(1)), &
+            v_sqr_l(ng(1)), &
+            w_sqr_l(ng(1)), &
+            tmp_avg_g(ng(1)), &
+            tmp_sqr_g(ng(1)), &
+            tmp_avg_l(ng(1)), &
+            tmp_sqr_l(ng(1)), &
+            utmp_avg_g(ng(1)), &
+            vtmp_avg_g(ng(1)), &
+            wtmp_avg_g(ng(1)), &
+            utmp_avg_l(ng(1)), &
+            vtmp_avg_l(ng(1)), &
+            wtmp_avg_l(ng(1)), &
+            utmp_sqr_g(ng(1)), &
+            vtmp_sqr_g(ng(1)), &
+            wtmp_sqr_g(ng(1)), &
+            utmp_sqr_l(ng(1)), &
+            vtmp_sqr_l(ng(1)), &
+            wtmp_sqr_l(ng(1)), &
+            uv_avg_g(ng(1)), &
+            vw_avg_g(ng(1)), &
+            wu_avg_g(ng(1)), &
+            uv_avg_l(ng(1)), &
+            vw_avg_l(ng(1)), &
+            wu_avg_l(ng(1)), &
+            uv_sqr_g(ng(1)), &
+            vw_sqr_g(ng(1)), &
+            wu_sqr_g(ng(1)), &
+            uv_sqr_l(ng(1)), &
+            vw_sqr_l(ng(1)), &
+            wu_sqr_l(ng(1)), &
+            void_avg(ng(1)), &
+            void_sqr(ng(1)), &
+            vorx_avg_g(ng(1)), &
+            vorx_avg_l(ng(1)), &
+            vorx_sqr_g(ng(1)), &
+            vorx_sqr_l(ng(1)))
+

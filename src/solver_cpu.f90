@@ -7,7 +7,8 @@ module mod_solver_cpu
   use decomp_2d
   use mod_fft       , only: fft
   use mod_common_mpi, only: n_x,n_y,n_z
-  use mod_types
+  use mod_types     , only: rp
+  use profiler
   !
   implicit none
   !
@@ -42,21 +43,31 @@ module mod_solver_cpu
     !$OMP WORKSHARE
     py(:,:,:) = p(1:n(1),1:n(2),1:n(3))
     !$OMP END WORKSHARE
+    call profiler_start("yc_to_x", tag = .true., tag_color = COLOR_PURPLE)
     call transpose_y_to_x(py,px)
+    call profiler_stop("yc_to_x")
 #else /*_DECOMP_Z*/
     !$OMP WORKSHARE
     pz(:,:,:) = p(1:n(1),1:n(2),1:n(3))
     !$OMP END WORKSHARE
+    call profiler_start("zc_to_x", tag = .true., tag_color = COLOR_PURPLE)
     call transpose_z_to_x(pz,px)
+    call profiler_stop("zc_to_x")
     !call transpose_z_to_y(pz,py)
     !call transpose_y_to_x(py,px)
 #endif
     call fft(arrplan(1,1),px) ! fwd transform in x
     !
+    call profiler_start("xc_to_y", tag = .true., tag_color = COLOR_PURPLE)
     call transpose_x_to_y(px,py)
+    call profiler_stop("xc_to_y")
+    !
     call fft(arrplan(1,2),py) ! fwd transform in y
     !
+    call profiler_start("yc_to_z", tag = .true., tag_color = COLOR_PURPLE)
     call transpose_y_to_z(py,pz)
+    call profiler_stop("yc_to_z")
+    !
     q = 0
     if(c_or_f(3).eq.'f'.and.bcz(1).eq.'D') q = 1
     if(bcz(0)//bcz(1).eq.'PP') then
@@ -65,10 +76,16 @@ module mod_solver_cpu
       call gaussel(         n_z(1),n_z(2),n_z(3)-q,a,b,c,lambdaxy,pz)
     endif
     !
+    call profiler_start("zc_to_y", tag = .true., tag_color = COLOR_PURPLE)
     call transpose_z_to_y(pz,py)
+    call profiler_stop("zc_to_y")
+    !
     call fft(arrplan(2,2),py) ! bwd transform in y
     !
+    call profiler_start("yc_to_x", tag = .true., tag_color = COLOR_PURPLE)
     call transpose_y_to_x(py,px)
+    call profiler_stop("yc_to_x")
+    !
     call fft(arrplan(2,1),px) ! bwd transform in x
     !
 #if defined(_DECOMP_X)
@@ -76,13 +93,17 @@ module mod_solver_cpu
     p(1:n(1),1:n(2),1:n(3)) = px(:,:,:)*normfft
     !$OMP END WORKSHARE
 #elif _DECOMP_Y
+    call profiler_start("xc_to_y", tag = .true., tag_color = COLOR_PURPLE)
     call transpose_x_to_y(px,py)
+    call profiler_stop("xc_to_y")
     !$OMP WORKSHARE
     p(1:n(1),1:n(2),1:n(3)) = py(:,:,:)*normfft
     !$OMP END WORKSHARE
 !#elif _DECOMP_Z
 #else
+    call profiler_start("xc_to_z", tag = .true., tag_color = COLOR_PURPLE)
     call transpose_x_to_z(px,pz)
+    call profiler_stop("xc_to_z")
     !call transpose_x_to_y(px,py)
     !call transpose_y_to_z(py,pz)
     !$OMP WORKSHARE

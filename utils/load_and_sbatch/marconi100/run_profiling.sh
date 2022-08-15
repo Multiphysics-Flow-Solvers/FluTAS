@@ -9,7 +9,7 @@
 #SBATCH -A iscrc_cansgpu
 #SBATCH -p    m100_usr_prod
 ##SBATCH --qos=m100_qos_bprod
-#SBATCH --job-name=CaNS_job_test_1
+#SBATCH --job-name=FluTAS_job_test_1
 #SBATCH --error=log.%j-%n.err
 #SBATCH --output=log.%j-%np.out
 
@@ -29,6 +29,6 @@ module load hpc-sdk/2020--binary
 #export CUDA_VISIBLE_DEVICES="$SLURM_LOCALID % $SLURM_GPUS_PER_NODE"
 LD_LIBRARY_PATH="/cineca/prod/opt/compilers/cuda/10.0/none/extras/CUPTI/lib64/:$LD_LIBRARY_PATH"
 
-####mpirun -np 16 --map-by socket:PE=8 --rank-by core --report-bindings ./cans
+####mpirun -np 16 --map-by socket:PE=8 --rank-by core --report-bindings ./flutas
 
-mpirun -np 16 --map-by socket:PE=8 --rank-by core --mca btl ^openib --report-bindings ./wrap_nsys.sh ./cans 2>&1 | tee out
+mpirun -np 16 --map-by socket:PE=8 --rank-by core --mca btl ^openib --report-bindings ./wrap_nsys.sh ./flutas 2>&1 | tee out

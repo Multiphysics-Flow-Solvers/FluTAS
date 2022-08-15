@@ -3,7 +3,7 @@ import os
 #
 # define some custom parameters, not defined in the DNS code
 #
-iseek      = 0            # number of bytes to skip relative to the origin of the binary file (0 for FluTAS)
+iseek      = 0            # number of bytes to skip relative to the origin of the binary file (0 for CaNS)
 iprecision = 8            # precision of real-valued data
 r0 = np.array([0.,0.,0.]) # domain origin
 non_uniform_grid = True
@@ -19,7 +19,7 @@ dtype_saves = np.dtype([                                                   \
                         ('time', float)  , ('isave', int)                  \
                        ])
 geofile  = "geometry.out"
-logfile  = input("Name of the log file written by FluTAS [log_visu_3d.out]: ") or "log_visu_3d.out"
+logfile  = input("Name of the log file written by CaNS [log_visu_3d.out]: ") or "log_visu_3d.out"
 gridname = input("Name to be appended to the grid files to prevent overwriting []: ") or ""
 xgridfile = "x"+gridname+'.bin'
 ygridfile = "y"+gridname+'.bin'

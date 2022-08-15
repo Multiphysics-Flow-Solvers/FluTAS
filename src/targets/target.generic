@@ -6,7 +6,7 @@ CPP_FLAGS := -cpp
 CC        := g++
 FC        := mpif90
 ifeq ($(DO_DBG),1)
-  DBG       := -O0 -g -fbacktrace -ffpe-trap=invalid -Wall -Wextra -pedantic -fcheck=all -finit-real=snan
+  DBG       := -O0 -g -fbacktrace -ffpe-trap=invalid -Wall -Wextra -pedantic -fcheck=all #-finit-real=snan
 else
   OPT       := -O3 -ffast-math -march=native
 endif
@@ -23,7 +23,7 @@ USE_NVTX = 0
 
 # Required for FFTW
 FFTW_HOME := -I/home/sw-hackathons/opt/spack/linux-ubuntu18.04-broadwell/gcc-9.3.0/fftw-3.3.8-2s34e4b37yi4nlmfix2fccdftl4xd36i/include
-LDFLAGS   += -L${FFTW_HOME}/lib -lfftw3
+LDFLAGS   += -L/home/sw-hackathons/opt/spack/linux-ubuntu18.04-broadwell/gcc-9.3.0/fftw-3.3.8-2s34e4b37yi4nlmfix2fccdftl4xd36i/lib -lfftw3
 
 # Required for INIT_MONTECARLO
 #GSL_LIB   += -lgsl -lgslcblas -lm -lstdc++

@@ -9,7 +9,7 @@
 #SBATCH -A pra22_5578
 #SBATCH -p    m100_usr_prod
 #######SBATCH --qos=m100_qos_bprod
-#SBATCH --job-name=FluTAS_job_test_1
+#SBATCH --job-name=CaNS_job_test_1
 #SBATCH --error=log.%j.err
 #SBATCH --output=log.%j.out
 
@@ -30,5 +30,5 @@ module load hpc-sdk/2020--binary
 #export CUDA_VISIBLE_DEVICES="$SLURM_LOCALID % $SLURM_GPUS_PER_NODE"
 LD_LIBRARY_PATH="/cineca/prod/opt/compilers/cuda/10.0/none/extras/CUPTI/lib64/:$LD_LIBRARY_PATH"
 
-mpirun -np 16 --map-by socket:PE=8 --rank-by core --report-bindings ./flutas
+mpirun -np 16 --map-by socket:PE=8 --rank-by core --report-bindings ./cans
 

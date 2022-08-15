@@ -788,39 +788,39 @@ module mod_bound
     integer :: i,j,k,q
     !
     select case(idir)
-    case(1) ! x direction
-      i = 0
-      if(left.eq.MPI_PROC_NULL) then
-        do k=1,nz
-          do j=1,ny
+      case(1) ! x direction
+        i = 0
+        if(left.eq.MPI_PROC_NULL) then
+          do k=1,nz
+            do j=1,ny
+              do q=0,nh_u-1
+                u(i-q,j,k) = vel2d(j,k)
+              enddo
+            enddo
+          enddo 
+        endif
+      case(2) ! y direction
+        j = 0
+        if(front.eq.MPI_PROC_NULL) then
+          do k=1,nz
             do q=0,nh_u-1
-              u(i-q,j,k) = vel2d(j,k)
+              do i=1,nx
+                v(i,j-q,k) = vel2d(i,k)
+              enddo
             enddo
-          enddo
-        enddo 
-      endif
-    case(2) ! y direction
-      j = 0
-      if(front.eq.MPI_PROC_NULL) then
-        do k=1,nz
+          enddo 
+        endif
+      case(3) ! z direction
+        k = 0
+        if(bottom.eq.MPI_PROC_NULL) then
           do q=0,nh_u-1
-            do i=1,nx
-              v(i,j-q,k) = vel2d(i,k)
+            do j=1,ny
+              do i=1,nx
+                w(i,j,k-q) = vel2d(i,j)
+              enddo
             enddo
           enddo
-        enddo 
-      endif
-    case(3) ! z direction
-      k = 0
-      if(bottom.eq.MPI_PROC_NULL) then
-        do q=0,nh_u-1
-          do j=1,ny
-            do i=1,nx
-              w(i,j,k-q) = vel2d(i,j)
-            enddo
-          enddo
-        enddo
-      endif 
+        endif 
     end select
     !
     return
@@ -959,7 +959,6 @@ module mod_bound
     integer , intent(in   )                               :: nh,halo,idir
     real(rp), intent(inout), dimension(1-nh:,1-nh:,1-nh:) :: p
     !@cuf attributes(managed) :: p
-    !
     integer :: i,j,k, q, lb1, lb2
     !integer :: requests(4), statuses(MPI_STATUS_SIZE,4)
     !
@@ -1019,7 +1018,7 @@ module mod_bound
       yrl_buf(:,:) = - huge(1._rp)
       ysr_buf(:,:) = - huge(1._rp)
       yrr_buf(:,:) = - huge(1._rp)
-      !$acc end kernels
+     !$acc end kernels
       !
       do q=0,nh-1
         !$acc kernels present(ysl_buf,ysr_buf)

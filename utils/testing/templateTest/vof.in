@@ -4,5 +4,7 @@ bub			        ! inivof
 0.5 0.5 0.5 0.25	        ! xc, yc, zc, r
 N N  N N  N N 		        ! cbcvof
 0. 0. 0. 0. 0. 0.		! bcvof
+0. 0. -0.98    	                ! gacc(1), gacc(2), gacc(3)
 24.5			        ! sigma
+0. 0. 0. 		    	! dpdl(1), dpdl(2), dpdl(3)
 F  0    		    	! late_init,i_late_init

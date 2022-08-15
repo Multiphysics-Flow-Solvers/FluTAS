@@ -5,9 +5,9 @@ APP ?= basic
 USE_FAST_KERNELS ?= 0
 
 include targets/target.$(ARCH)
-include apps/$(APP)/app.$(APP)
+include apps/app.$(APP)
 
-POST_PATH = apps/$(APP)/postp.$(APP) -I./postprocessing
+POST_PATH = apps/postp.$(APP) -I./postprocessing
 
 .PHONY: clean
 
@@ -35,7 +35,7 @@ initmpi.o \
 initsolver.o \
 load.o \
 output.o \
-apps/$(APP)/param.o \
+param.o \
 rk.o \
 source.o \
 sanity.o \
@@ -60,10 +60,10 @@ ifeq ($(TURB_FORCING),1)
 endif
 
 ifeq ($(DO_POSTPROC),1)
+ifeq ($(HEAT_TRANSFER),1) 
 	OBJS += postprocessing/post.o
-ifeq ($(USE_VOF),1)
-	OBJS += postprocessing/tagging.o
 endif
+	OBJS += postprocessing/tagging.o
 	DFLAGS += -D_DO_POSTPROC
 endif
 
@@ -74,14 +74,14 @@ endif
 
 ifeq ($(CONSTANT_COEFFS_POISSON),1) 
 	DFLAGS += -D_CONSTANT_COEFFS_POISSON 
-	OBJS += solver_gpu.o solver_cpu.o
+	OBJS += solver.o solver_cpu.o
 else 
 	OBJS += solver_vc.o
 	LDFLAGS += -lHYPRE
 endif
 
 ifeq ($(HEAT_TRANSFER),1) 
-	DFLAGS += -D_HEAT_TRANSFER
+	DFLAGS += -D_HEAT_TRANSFER -D_MOM_QUICK
 ifeq ($(BOUSSINESQ),1)
         DFLAGS += -D_BOUSSINESQ
 endif
@@ -92,18 +92,13 @@ ifeq ($(USE_VOF),1)
 	DFLAGS += -D_USE_VOF
 	OBJS += vof.o mom.o funcs.o
 else
-	OBJS += mom.o funcs.o
+	OBJS += mom.o moms.o
 endif
 
 ifeq ($(USE_NVTX),1)  
 	DFLAGS += -D_USE_NVTX
 	LDFLAGS += $(NVTX_LIB)
 endif
-
-ifeq ($(BENCHMARK_NO_IO),1)  
-	DFLAGS += -D_BENCHMARK_NO_IO
-endif
-
 
 ###########################################################
 
@@ -112,14 +107,14 @@ TARGET = flutas
 all: $(TARGET).$(APP)
 	ln -s $(TARGET).$(APP) $(TARGET)
 
-main.o : apps/$(APP)/$(MAIN_SRC) $(OBJS)
+main.o : apps/$(MAIN_SRC) $(OBJS)
 	$(FC) $(FFLAGS) $(DFLAGS) $(CPP_FLAGS) -I$(POST_PATH) -c -o main.o $<
 
 $(TARGET).$(APP): $(OBJS) main.o
 	$(FC) $(FFLAGS) $(DFLAGS) $(OBJS) $(LDFLAGS) main.o -o $(TARGET).$(APP)
 
 clean-obj:
-	rm -rf *.o *.mod *dSYM && rm -rf 2decomp/*.{mod,d,o} && rm -rf postprocessing/*.{mod,d,o} && rm -rf apps/$(APP)/*.{mod,d,o}
+	rm -rf *.o *.mod *dSYM
 
 clean: clean-obj
 	rm -rf $(TARGET)*

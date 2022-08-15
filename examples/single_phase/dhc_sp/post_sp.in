@@ -1,6 +1,0 @@
-T				! doTime
-3				! avg_dir
-100				! time_deltai
-F				! doFavre
-T				! doWall
-100				! wall_deltai

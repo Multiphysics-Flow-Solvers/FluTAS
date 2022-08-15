@@ -10,7 +10,7 @@ ifeq ($(DO_DBG),1)
 else
   OPT       := -O3 #-hfp3
 endif
-PRE       := -fallow-argument-mismatch # this option seems required to succesfully compile 2decomp on CRAY machines
+PRE       := #-r8
 
 # Take all the compiler flags together
 FFLAGS  := $(OPT) $(DBG) $(PRE)
@@ -23,7 +23,7 @@ USE_NVTX = 0
 
 # Required for FFTW
 FFTW_HOME := -I/home/sw-hackathons/opt/spack/linux-ubuntu18.04-broadwell/gcc-9.3.0/fftw-3.3.8-2s34e4b37yi4nlmfix2fccdftl4xd36i/include
-LDFLAGS   += -L${FFTW_HOME}/lib -lfftw3
+LDFLAGS   += -L/home/sw-hackathons/opt/spack/linux-ubuntu18.04-broadwell/gcc-9.3.0/fftw-3.3.8-2s34e4b37yi4nlmfix2fccdftl4xd36i/lib -lfftw3
 
 # Required for INIT_MONTECARLO
 #GSL_LIB   += -lgsl -lgslcblas -lm -lstdc++

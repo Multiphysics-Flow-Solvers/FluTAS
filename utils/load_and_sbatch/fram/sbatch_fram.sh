@@ -14,4 +14,4 @@ module load intel/2018b
 #cd /cluster/work/users/nicolos/hst/low_temp_1/hst_rk_we0p02/
 cd /cluster/work/users/"your_name"/
 
-mpirun -np 1024 ./flutas > my_output_file.txt 2>&1
+mpirun -np 1024 ./cans > my_output_file.txt 2>&1

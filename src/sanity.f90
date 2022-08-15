@@ -12,11 +12,12 @@ module mod_sanity
   use mod_correc    , only: correc
   use mod_fft       , only: fftend
   use mod_fillps    , only: fillps
+  use mod_initflow  , only: add_noise
   use mod_initmpi   , only: initmpi
   use mod_initsolver, only: initsolver
-  use mod_param     , only: small
+  use mod_param     , only: small,rho1,rho2,mu1,mu2
 #if defined(_OPENACC)
-  use mod_solver_gpu, only: solver_gpu
+  use mod_solver    , only: solver
 #else
   use mod_solver_cpu, only: solver_cpu
 #endif
@@ -25,7 +26,7 @@ module mod_sanity
   implicit none
   !
   private
-  public  :: test_sanity,flutas_error
+  public  :: test_sanity
   !
   contains
   !
@@ -53,12 +54,11 @@ module mod_sanity
     !
     logical :: passed
     !
-    call chk_dims(ng,dims,ipencil,passed);          if(.not.passed) call flutas_error
-    call chk_space_time_disc(passed);               if(.not.passed) call flutas_error
-    call chk_stop_type(stop_type,passed);           if(.not.passed) call flutas_error
-    call chk_bc(cbcvel,cbcpre,bcvel,bcpre,passed);  if(.not.passed) call flutas_error
-    call chk_outflow(cbcpre,is_outflow,passed);     if(.not.passed) call flutas_error
-    call chk_forcing(cbcpre,is_forced,passed);      if(.not.passed) call flutas_error
+    call chk_dims(ng,dims,ipencil,passed);         if(.not.passed) call abortit
+    call chk_stop_type(stop_type,passed);          if(.not.passed) call abortit
+    call chk_bc(cbcvel,cbcpre,bcvel,bcpre,passed); if(.not.passed) call abortit
+    call chk_outflow(cbcpre,is_outflow,passed);    if(.not.passed) call abortit
+    call chk_forcing(cbcpre,is_forced,passed);     if(.not.passed) call abortit
     ! 
     return
   end subroutine test_sanity
@@ -78,49 +78,6 @@ module mod_sanity
     !
     return 
   end subroutine chk_stop_type
-  !
-  subroutine chk_space_time_disc(passed)
-    !
-    use mod_param, only: time_scheme,space_scheme_mom
-    !
-    implicit none
-    !
-    logical, intent(out) :: passed
-    !
-    logical :: passed_loc
-    !
-    passed = .true.
-    !
-    ! check validity of the time discretization schemes
-    !
-    passed_loc = .true.
-    if(time_scheme.ne.'ab2'.and.time_scheme.ne.'rk3') then
-      if(myid.eq.0) print*, 'ERROR: Wrong time discretization scheme. Check dns.in'
-      passed_loc = .false.
-    endif
-    passed = passed.and.passed_loc
-    !
-#if defined(_USE_VOF) && defined(_CONSTANT_COEFFS_POISSON)
-    passed_loc = .true.
-    if(time_scheme.eq.'rk3') then
-      if(myid.eq.0) print*, 'ERROR: rk3 is not supported yet for two-phase flows combined with a time splitting for pressure'
-      if(myid.eq.0) print*, 'ERROR: For now use ab2'
-      passed_loc = .false.
-    endif
-    passed = passed.and.passed_loc
-#endif
-    !
-    ! check validity of the space discretization schemes
-    !
-    passed_loc = .true.
-    if(space_scheme_mom.ne.'cen'.and.space_scheme_mom.ne.'fll') then
-      if(myid.eq.0) print*, 'ERROR: Wrong space discretization scheme for momentum  equation. Check dns.in'
-      passed_loc = .false.
-    endif
-    passed = passed.and.passed_loc
-    !
-    return 
-  end subroutine chk_space_time_disc
   !
   subroutine chk_dims(ng,dims,ipencil,passed)
     !
@@ -178,7 +135,7 @@ module mod_sanity
     ! check validity of pressure and velocity BCs
     !
     passed_loc = .true.
-    do ivel=1,3
+    do ivel = 1,3
       do idir=1,3
         bc01v = cbcvel(0,idir,ivel)//cbcvel(1,idir,ivel)
         passed_loc = passed_loc.and.( (bc01v.eq.'PP').or. &
@@ -225,18 +182,6 @@ module mod_sanity
       print*, 'ERROR: pressure BCs in directions x and y must be homogeneous (value = 0.).'
     passed = passed.and.passed_loc
     !
-#if defined(_OPENACC)
-    passed_loc = .true.
-    do ivel=1,3
-      do idir=1,3
-        bc01v = cbcvel(0,idir,ivel)//cbcvel(1,idir,ivel)
-        if( (bc01p.eq.'ND').or.(bc01p.eq.'DN') ) passed_loc = .false.
-      enddo
-    enddo
-    if(myid.eq.0.and.(.not.passed_loc)) print*, 'ERROR: zero-pressure outflow BCs is not supported in GPU yet.'
-    passed = passed.and.passed_loc
-#endif
-    !
     return 
   end subroutine chk_bc
   !
@@ -267,10 +212,6 @@ module mod_sanity
   !
   subroutine chk_forcing(cbcpre,is_forced,passed)
     !
-#if defined(_USE_VOF)
-    use mod_param, only: rho1,rho2
-#endif
-    !
     implicit none
     !
     character(len=1), intent(in ), dimension(0:1,3) :: cbcpre
@@ -290,8 +231,6 @@ module mod_sanity
     if(myid.eq.0.and.(.not.passed)) &
     print*, 'ERROR: Flow cannot be forced in a non-periodic direction; check the BCs and is_forced in dns.in.'
     !
-#if defined(_USE_VOF)
-    !
     ! 2) ensure that the thermophysical properties of the two phases are the same
     !    if bulk-velocity forcing is employed 
     !
@@ -300,35 +239,110 @@ module mod_sanity
     endif
     if(myid.eq.0.and.(.not.passed)) then
       print*, 'ERROR: Bulk-velocity forcing currently implemented only for matched density' 
-      print*, 'As temporary alternative, use constant pressure gradient forcing, i.e., dpdl_x,dpdl_y,dpdl_z in dns.in' 
+      print*, 'As temporary alternative, use constant pressure gradient forcing (bforce(:) in dns.in)' 
     endif
-    !
-#endif
     !
     return 
   end subroutine chk_forcing
   !
-  subroutine flutas_error(error)
+  ! [NOTE] Never called?
+  subroutine chk_solvers(n,dims,dims_xyz,dli,nh_d,nh_u,nh_p,halo_u,halo_up,halo_p, &
+                         dzci,dzfi,cbcvel,cbcpre,bcvel,bcpre,is_outflow,passed)
     !
     implicit none
     !
-    character(len=*), intent(in), optional :: error
+    integer         , intent(in ), dimension(3)                :: n,dims
+    integer         , intent(in ), dimension(3,3)              :: dims_xyz
+    real(rp)        , intent(in ), dimension(3)                :: dli
+    integer         , intent(in )                              :: nh_d,nh_u,nh_p
+    integer         , intent(in ), dimension(3)                :: halo_u,halo_up,halo_p
+    real(rp)        , intent(in ), dimension(1-nh_d:n(3)+nh_d) :: dzci,dzfi
+    character(len=1), intent(in ), dimension(0:1,3,3)          :: cbcvel
+    character(len=1), intent(in ), dimension(0:1,3)            :: cbcpre
+    real(rp)        , intent(in ), dimension(0:1,3,3)          :: bcvel
+    real(rp)        , intent(in ), dimension(0:1,3)            :: bcpre
+    logical         , intent(in ), dimension(0:1,3)            :: is_outflow
+    logical         , intent(out)                              :: passed
     !
-    if(  present(error)) then
-     if(myid.eq.0) print*, ''
-     if(myid.eq.0) print*, '*** Error in FluTAS ***'
-     if(myid.eq.0) print*, error 
-    else
-     if(myid.eq.0) print*, ''
-     if(myid.eq.0) print*, '*** Simulation aborted due to errors in the input file ***'
-     if(myid.eq.0) print*, '    check the files with .in extension'
-    endif
+    real(rp), dimension(1-nh_u:n(1)+nh_u,1-nh_u:n(2)+nh_u,1-nh_u:n(3)+nh_u) :: u,v,w
+    real(rp), dimension(1-nh_p:n(1)+nh_p,1-nh_p:n(2)+nh_p,1-nh_p:n(3)+nh_p) :: p,up,vp,wp
+#if defined(_OPENACC)
+    attributes(managed) :: u,v,w,p,up,vp,wp,dzfi,dzci
+    integer :: istat
+#endif
+    real(rp), dimension(1-nh_d:n(3)+nh_d) :: dzc,dzf
+    type(C_PTR), dimension(2,2) :: arrplan
+    real(rp), dimension(n(1),n(2)) :: lambdaxy
+    real(rp) :: normfft
+    real(rp), dimension(n(3)) :: a,b,c,bb
+    real(rp), dimension(n(2),n(3),0:1) :: rhsbx
+    real(rp), dimension(n(1),n(3),0:1) :: rhsby
+    real(rp), dimension(n(1),n(2),0:1) :: rhsbz
+    logical , dimension(0:1,3)         :: no_outflow
+    real(rp), dimension(3) :: dl
+    real(rp) :: dt,dti,alpha
+    real(rp) :: divtot,divmax,resmax
+    logical  :: passed_loc
+#if defined(_OPENACC)
+    attributes(managed) :: a,b,bb,c,lambdaxy,rhsbx,rhsby,rhsbz, dzc, dzf
+#endif
+    passed = .true.
     !
+    ! initialize velocity below with some random noise
+    !
+    up(:,:,:) = 0._rp
+    vp(:,:,:) = 0._rp
+    wp(:,:,:) = 0._rp
+    call add_noise(n(1),n(2),n(3),dims,123,0.5_rp,up(1:n(1),1:n(2),1:n(3)))
+    call add_noise(n(1),n(2),n(3),dims,456,0.5_rp,vp(1:n(1),1:n(2),1:n(3)))
+    call add_noise(n(1),n(2),n(3),dims,789,0.5_rp,wp(1:n(1),1:n(2),1:n(3)))
+    !
+    ! test pressure correction
+    !
+    call initsolver(n,dims,dims,dli,nh_d,dzci,dzfi,cbcpre,bcpre(:,:),(/'c','c','c'/), &
+                    lambdaxy,a,b,c,arrplan,normfft,rhsbx,rhsby,rhsbz)
+    dl  = dli**(-1)
+    dzc = dzci**(-1)
+    dzf = dzfi**(-1)
+    dt  = acos(-1.) ! value is irrelevant
+    dti = dt**(-1)
+    no_outflow(:,:) = .false.
+    call bounduvw(cbcvel,n,bcvel,nh_d,nh_p,halo_up,no_outflow,dl,dzc,dzf,up,vp,wp)
+#if !defined(_USE_VOF)
+    call fillps(n,dli,dzfi,dti,up,vp,wp,p)
+#endif
+    call updt_rhs_b(n(1),n(2),n(3),(/'c','c','c'/),cbcpre,nh_p,rhsbx,rhsby,rhsbz,p(1:n(1),1:n(2),1:n(3)))
+#if defined(_OPENACC)
+    call solver(n_z,dims_xyz(:,3),arrplan,normfft,lambdaxy,a,b,c,cbcpre(:,:),(/'c','c','c'/),p)
+#else
+    call solver_cpu(n,arrplan,normfft,lambdaxy,a,b,c,cbcpre(:,3),(/'c','c','c'/),p)
+#endif
+#if !defined(_USE_VOF)
+    call correc(n,dli,dzci,dt,p,up,vp,wp,u,v,w)
+#endif
+    call bounduvw(cbcvel,n,bcvel,nh_d,nh_u,halo_u,is_outflow,dl,dzc,dzf,u,v,w)
+    call chkdiv(n(1),n(2),n(3),dli(1),dli(2),dli(3),nh_d,nh_u,dzfi,u,v,w,divtot,divmax)
+    passed_loc = divmax.lt.small
+    if(myid.eq.0.and.(.not.passed_loc)) &
+    print*, 'ERROR: Pressure correction: Divergence is too large.'
+    passed = passed.and.passed_loc
+    call fftend(arrplan)
+    !
+    return
+  end subroutine chk_solvers
+  !
+  subroutine abortit
+    !
+    implicit none
+    !
+    if(myid.eq.0) print*, ''
+    if(myid.eq.0) print*, '*** Simulation aborted due to errors in the input file ***'
+    if(myid.eq.0) print*, '    check dns.in'
     call decomp_2d_finalize
     call MPI_FINALIZE(ierr)
     call exit
     !
     return
-  end subroutine flutas_error
+  end subroutine abortit
   !
 end module mod_sanity

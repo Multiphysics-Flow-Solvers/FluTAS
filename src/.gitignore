@@ -4,19 +4,13 @@
 *.bin
 *.MOD
 *.log
-*log
 *dSYM
 *.xdmf
 *.xmf
-*.in
-flutas*
+flutas
 run/
 data/*.log
 data/*.out
 data/*.xdmf
-data/*.xmf
-data/*.py
 ../utils/postprocessing/*.out
-../examples/*.out
-../examples/*log
 

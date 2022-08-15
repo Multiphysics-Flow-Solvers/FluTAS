@@ -1,8 +1,0 @@
-uni                       ! initmp (options are 'uni' and 'sin')
-600.d0                    ! tmp0 (init. temp. in the domain)
-1004.5d0                  ! cp_sp
-717.5d0                   ! cv_sp
-0.046 	                  ! kappa_sp
-P P  N N  D D             ! cbctmp(0:1,1:3) [T BC type]
-0. 0.  0. 0.  960. 240.   ! bctmp(0:1,1:3)  [T BC value]
-1.666667d-3               ! beta_sp_th 

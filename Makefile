@@ -8,7 +8,7 @@ ARCH ?= generic
 USE_FAST_KERNELS ?= 0
 USE_NVTX ?= 0
 
-APP_LIST=basic single_phase two_phase_ht two_phase_inc_isot two_phase_inc_isot_turb
+APP_LIST=basic two_phase_ht two_phase_inc_isot two_phase_inc_isot_turb
 
 all: 
 	@for idapp in $(APP_LIST); \

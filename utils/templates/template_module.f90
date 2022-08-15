@@ -54,9 +54,9 @@ module mod_template
     !
     ! Body of the subroutine
     !
-    do k=1,nz
-      do j=1,ny
-        do i=1,nx
+    do k=1,n(3)
+      do j=1,n(2)
+        do i=1,n(1)
           !
           ! ...
           !

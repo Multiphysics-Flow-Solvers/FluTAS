@@ -8,7 +8,7 @@ The input file ***dns.in*** must be always provide to run a simulation. It conta
 * `cfl,dt_input`   : cfl and employed constant time-step, dt (the constant dt is used only if `constant_dt` is true)
 * `constant_dt`    : prescribe a constant dt (`T`) or constant CFL (`F`)
 * `time_scheme`, `space_scheme_mom`: scheme for the time and space discretization of the momentum equation
-* `rho_sp`,`mu_sp` : fluid density and dynamic viscosity (relevant only single-phase, i.e.,`!defined(_USE_VOF)`. If the flag `defined(_USE_VOF)` is employed during the compilation, the values of `rho_sp` and `mu_sp` are overwritten by the corresponding ones defined in `dns.in` for phase 2)
+* `rho_sp`,`mu_sp` : fluid density and dynamic viscosity (relevant only single-phase, i.e.,`!defined(_USE_VOF)`. If the flag `defined(_USE_VOF)` is employed during the compilation, the values of `rho_sp` and `mu_sp` are overwritten by the corresponding ones defined in `vof.in` for phase 2)
 * `inivel`         : type of initialized velocity field
 * `is_wallturb`    : initializes velocity conditions for faster turbulence transition in wall-bounded flows
 * `wallturb_type`  : initial condition for triggering turbulent transition in wall-bounded flows

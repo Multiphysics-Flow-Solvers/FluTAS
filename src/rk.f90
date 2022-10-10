@@ -48,10 +48,11 @@ module mod_rk
     !@cuf attributes(managed) :: dzci, dzfi, u, v, w, dudtrko, dvdtrko, dwdtrko
     !@cuf attributes(managed) :: mu, rho
     !
-    ! Allocate once
-    if( (.not.allocated(dudtrk)) .or. (.not.allocated(dvdtrk)) .or. (.not.allocated(dwdtrk) ) ) then
-      allocate (dudtrk(nx,ny,nz),dvdtrk(nx,ny,nz),dwdtrk(nx,ny,nz))
-    endif
+    ! we allocate the arrays dudtrko,dvdtrko and dwdtrko only once
+    !
+    if(.not.allocated(dudtrk)) allocate(dudtrk(nx,ny,nz))
+    if(.not.allocated(dvdtrk)) allocate(dvdtrk(nx,ny,nz))
+    if(.not.allocated(dwdtrk)) allocate(dwdtrk(nx,ny,nz))
     !
     ! compute the r.h.s. of the momentum equation 
     !

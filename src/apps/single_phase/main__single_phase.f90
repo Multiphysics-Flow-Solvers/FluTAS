@@ -629,7 +629,7 @@ program flutas
       !
       ! --> add pressure gradient
       !
-      call pres_sp_src(n(1),n(2),n(3),f_t12,dxi,dyi,dzi,nh_d,nh_u,dzci,1._rp/rho_sp,pold,u,v,w)
+      call pres_sp_src(n(1),n(2),n(3),f_t12,dxi,dyi,dzi,nh_d,nh_u,dzci,1._rp/rho_sp,p,u,v,w)
       !
 #if defined(_TURB_FORCING)
       !

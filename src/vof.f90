@@ -70,11 +70,11 @@ module mod_vof
     integer :: n1, n2, n3
     !@cuf attributes(managed) :: nor, cur, kappa, d_thinc, vof, ug, vg, wg, dzc, dzf
     !
-    if( (.not.allocated(dvof1)) .or. (.not.allocated(dvof2)) .or. (.not.allocated(flux) ) ) then
-      allocate (dvof1(0:n(1)+1,0:n(2)+1,0:n(3)+1), & 
-                dvof2(0:n(1)+1,0:n(2)+1,0:n(3)+1), &
-                flux( 0:n(1)+0,0:n(2)+0,0:n(3)+0))
-    endif
+    ! we allocate dvof1, dvof2 and flux only once
+    !
+    if(.not.allocated(dvof1)) allocate(dvof1(0:n(1)+1,0:n(2)+1,0:n(3)+1))
+    if(.not.allocated(dvof2)) allocate(dvof2(0:n(1)+1,0:n(2)+1,0:n(3)+1))
+    if(.not.allocated(flux )) allocate(flux (0:n(1)+0,0:n(2)+0,0:n(3)+0))
     !
     dl(:) = dli(:)**(-1)
     dli1 = dli(1)

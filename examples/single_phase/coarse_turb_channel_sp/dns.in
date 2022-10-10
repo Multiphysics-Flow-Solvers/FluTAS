@@ -11,7 +11,7 @@ cfr                          ! bulk_ftype
 100000 100. 0.1              ! nstep,time_max,tw_max
 T F F                        ! stop_type(1:3)
 F                            ! restart
-10 10 20 500 5000 10000      ! icheck, iout0d, iout1d, iout2d, iout3d, isave
+10 10 500 1000 5000 10000    ! icheck, iout0d, iout1d, iout2d, iout3d, isave
 P P  P P  D D                ! cbcvel(0:1,1:3,1) [u BC type]
 P P  P P  D D                ! cbcvel(0:1,1:3,2) [v BC type]
 P P  P P  D D                ! cbcvel(0:1,1:3,3) [w BC type]
@@ -25,5 +25,5 @@ T F F                        ! is_forced(1:3)
 1. 0. 0.                     ! bvel_x,bvel_y,bvel_z
 0. 0. 0.                     ! dpdl_x,dpdl_y,dpdl_z
 F F  F F  F F                ! is_outflow(0:1,1:3)
-4 4                          ! dims_in(1:2)
+1 1                          ! dims_in(1:2)
 4                            ! numthreadsmax

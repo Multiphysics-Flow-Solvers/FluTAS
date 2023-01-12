@@ -248,14 +248,14 @@ module mod_source
     !
     implicit none 
     !
-    integer , intent(in )                                     :: nx,ny,nz
-    real(rp), intent(in )                                     :: dxi,dyi,dzi
-    integer , intent(in )                                     :: nh_d,nh_u
-    real(rp), intent(in ), dimension(1-nh_d:)                 :: dzci
-    real(rp), intent(in )                                     :: rho0i,f_t12,f_t12_o
-    real(rp), intent(in ), dimension(0:,0:,0:)                :: p,pold
-    real(rp), intent(in ), dimension(0:,0:,0:)                :: rho
-    real(rp), intent(out), dimension(1-nh_u:,1-nh_u:,1-nh_u:) :: u,v,w
+    integer , intent(in   )                                     :: nx,ny,nz
+    real(rp), intent(in   )                                     :: dxi,dyi,dzi
+    integer , intent(in   )                                     :: nh_d,nh_u
+    real(rp), intent(in   ), dimension(1-nh_d:)                 :: dzci
+    real(rp), intent(in   )                                     :: rho0i,f_t12,f_t12_o
+    real(rp), intent(in   ), dimension(0:,0:,0:)                :: p,pold
+    real(rp), intent(in   ), dimension(0:,0:,0:)                :: rho
+    real(rp), intent(inout), dimension(1-nh_u:,1-nh_u:,1-nh_u:) :: u,v,w
     !
     real(rp) :: rhox,rhoy,rhoz,rhoxi,rhoyi,rhozi
 #if defined(_CONSTANT_COEFFS_POISSON)
@@ -312,14 +312,14 @@ module mod_source
     !
     implicit none 
     !
-    integer , intent(in )                                     :: nx,ny,nz
-    real(rp), intent(in )                                     :: f_t12
-    real(rp), intent(in )                                     :: dxi,dyi,dzi
-    integer , intent(in )                                     :: nh_d,nh_u
-    real(rp), intent(in ), dimension(1-nh_d:)                 :: dzci
-    real(rp), intent(in )                                     :: rho0i
-    real(rp), intent(in ), dimension(0:,0:,0:)                :: pold
-    real(rp), intent(out), dimension(1-nh_u:,1-nh_u:,1-nh_u:) :: u,v,w
+    integer , intent(in   )                                     :: nx,ny,nz
+    real(rp), intent(in   )                                     :: f_t12
+    real(rp), intent(in   )                                     :: dxi,dyi,dzi
+    integer , intent(in   )                                     :: nh_d,nh_u
+    real(rp), intent(in   ), dimension(1-nh_d:)                 :: dzci
+    real(rp), intent(in   )                                     :: rho0i
+    real(rp), intent(in   ), dimension(0:,0:,0:)                :: pold
+    real(rp), intent(inout), dimension(1-nh_u:,1-nh_u:,1-nh_u:) :: u,v,w
     !
     integer :: i,j,k,ip,jp,kp
     !@cuf attributes(managed) :: dzci, pold, u, v, w

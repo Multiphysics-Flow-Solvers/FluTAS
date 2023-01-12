@@ -2,7 +2,7 @@
 
 **FluTAS (Fluid Transport Accelerated Solver)** is an open-source code targeting multiphase fluid dynamics simulations. The key feature of **FluTAS** is the ability to efficiently run both on **many-CPUs** and **many-GPUs** in a single and unified framework. This framework is also designed to be modular so that it can be extended in a sustainable manner. So far, the code has been tested on several large-scale HPC clusters, both standard CPU-based and accelerated ones.
 
-The overall effort was initiated within the research group of Prof. Luca Brandt at KTH in Stockholm (Sweden). The code structure and the Poisson solver are based on **CaNS** (https://github.com/p-costa/CaNS), and have been adapted to include the different modules developed by the various researchers and students at KTH Engineering Mechanics.
+The overall effort was initiated within the research group of Prof. Luca Brandt at KTH in Stockholm (Sweden). The code structure and the Poisson solver are based on **CaNS** (https://github.com/CaNS-World/CaNS), and have been adapted to include the different modules developed by the various researchers and students at KTH Engineering Mechanics.
 
 **References for the original code structure and Poisson solver (CPU and GPU)**
 
@@ -12,7 +12,7 @@ The overall effort was initiated within the research group of Prof. Luca Brandt 
 
 **Reference for FluTAS and the acceleration of the multiphase code**
 
-Crialesi-Esposito, M., Scapin, N., Demou, A. D., Rosti, M. E., Costa, P., Spiga, F., & Brandt, L. (2022). *FluTAS: A GPU-accelerated finite difference code for multiphase flows*. [[arXiv preprint]](https://arxiv.org/abs/2204.08834)
+Crialesi-Esposito, M., Scapin, N., Demou, A. D., Rosti, M. E., Costa, P., Spiga, F., & Brandt, L. (2022). *FluTAS: A GPU-accelerated finite difference code for multiphase flows*. *Computer Physics Communications* 284: 108602 (2023). [doi.org/10.1016/j.cpc.2022.108602](https://doi.org/10.1016/j.cpc.2022.108602) [[arXiv preprint]](https://arxiv.org/abs/2204.08834)
 
 We recommend new users to have a look at this document and to carefully read the section **Compilation and usage**.
 

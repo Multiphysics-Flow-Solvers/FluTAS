@@ -5,12 +5,12 @@
 F                            ! constant_dt
 ab2 cen                      ! time_scheme, space_scheme_mom
 1.0 0.0001773049645390071    ! rho_sp, mu_sp
-poi                          ! inivel
+poi F 0.0                    ! inivel, is_noise_vel, noise_vel
 T hkv                        ! is_wallturb, wallturb_type 
 cfr                          ! bulk_ftype
 100000 100. 0.1              ! nstep,time_max,tw_max
 T F F                        ! stop_type(1:3)
-F                            ! restart
+F 2 1 T                      ! restart, num_max_chkpt, input_chkpt, latest
 10 10 20 500 5000 10000      ! icheck, iout0d, iout1d, iout2d, iout3d, isave
 P P  P P  D D                ! cbcvel(0:1,1:3,1) [u BC type]
 P P  P P  D D                ! cbcvel(0:1,1:3,2) [v BC type]

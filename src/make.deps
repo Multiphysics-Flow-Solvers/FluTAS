@@ -85,6 +85,7 @@ load.o : 2decomp/decomp_2d.o
 load.o : 2decomp/io.o
 load.o : common_mpi.o
 load.o : apps/$(APP)/param.o
+load.o : sanity.o
 load.o : types.o
 mom.o : funcs.o
 mom.o : apps/$(APP)/param.o

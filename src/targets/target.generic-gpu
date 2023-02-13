@@ -31,9 +31,5 @@ LDFLAGS   += -L${FFTW_HOME}/lib -lfftw3
 FFLAGS    += -cuda -acc -gpu=cc70,cuda11.0 -cudalib=cufft,curand 
 DFLAGS    += -D_EPHC -D_GPU_MPI
 
-# Required for INIT_MONTECARLO
-#GSL_LIB   += -L~/lib -lgsl -lgslcblas -lm -lstdc++
-#GSL_INC   += -I~/include 
-
 # Required for NVTX
 NVTX_LIB   += -lnvToolsExt

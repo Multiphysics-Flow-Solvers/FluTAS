@@ -1799,20 +1799,6 @@ module mod_vof
   !
   ! code devoted to the VoF initialization
   !
-#if defined(_INIT_MONTECARLO)
-  !--------------------------------------C interface--------------------------------------------
-  interface
-    subroutine init_MTHINC(xc, yc, zc, rs, xl, xu, dx, beta, vof) BIND(C, name="init_MTHINC_")
-      use, intrinsic :: ISO_C_BINDING, ONLY: C_INT
-      implicit none
-      ! integer (C_INT) ::  dimM(0:2), Ng, maxit, it, ierr, norm,drank, dnProcNode
-      real(rp) :: xc, yc, zc, rs,  dx, beta, vof
-      real(rp) :: xl(3), xu(3)
-      ! real(rp) :: maxError, beta, tres2
-    end subroutine init_MTHINC
-  end interface
-#endif
-  !
   subroutine initvof(n,dli,vof)
     !
     use mod_param     , only: inivof,lx,ly,lz,cbcvof,xc,yc,zc,r,nbub
@@ -1914,7 +1900,6 @@ module mod_vof
                 elseif( sdist.gt. eps ) then
                   vof(i,j,k) = 0.0_rp
                 else
-#if !defined(_INIT_MONTECARLO)
                   zl = z-dl(3)/2.0_rp
                   yl = y-dl(2)/2.0_rp
                   xl = x-dl(1)/2.0_rp
@@ -1933,13 +1918,7 @@ module mod_vof
                       enddo
                     enddo
                   enddo
-#else
-                  call init_MTHINC(xc(i_b), yc(i_b), zc(i_b), r(i_b), &
-                    (/x-dl(1)*0.5_rp, y-dl(2)*0.5_rp, z-dl(3)*0.5_rp/), &
-                    (/x+dl(1)*0.5_rp, y+dl(2)*0.5_rp, z+dl(3)*0.5_rp/), & 
-                    dl(1), beta_thinc, vof(i,j,k))
-                  vof(i,j,k) = vof(i,j,k)*dli(1)*dli(2)*dli(3)
-#endif
+                  !
                 endif
               endif
             enddo

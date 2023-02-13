@@ -3,7 +3,7 @@
 !
 module mod_fft
   !
-  use iso_c_binding , only: C_INT
+  use, intrinsic :: iso_c_binding, only: C_INT
   use mod_common_mpi, only: ierr,myid
   use mod_fftw_param
   use mod_param     , only: pi

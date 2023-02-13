@@ -15,7 +15,7 @@ FFLAGS  := $(OPT) $(PRE)
 DFLAGS  = -D_TIMING 
 DFLAGS  += -D_EPA2A
 DFLAGS  += -D_DECOMP_X
-DFLAGS  += -D__BENCHMARK_NO_IO
+DFLAGS  += -D_BENCHMARK_NO_IO
 #DFLAGS  += -D_OVERWRITE # FFLAGS_2DECOMP
 #DFLAGS  += -D_EVEN # FFLAGS_2DECOMP
 LDFLAGS :=
@@ -32,10 +32,6 @@ FFLAGS    += -cuda -acc -gpu=cc70,cuda11.0,lineinfo -cudalib=cufft,curand -Minfo
 DFLAGS    += -D_EPHC
 DFLAGS    += -D_GPU_MPI
 #DFLAGS    += -D_USE_NVTX_FFT
-
-# Required for INIT_MONTECARLO
-#GSL_LIB   += -L~/lib -lgsl -lgslcblas -lm -lstdc++
-#GSL_INC   += -I~/include 
 
 # Required for NVTX
 NVTX_LIB   += -lnvToolsExt

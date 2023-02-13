@@ -1,29 +1,29 @@
-2 128 128                            ! itot, jtot, ktot
-0.00111659375 7.14620d-2 7.14620d-2  ! lx, ly, lz
+1024 1024 512                        ! itot, jtot, ktot
+0.019115d0 0.019115d0 0.009557534d0  ! lx, ly, lz
 0.                                   ! gr
-0.5 1.0e-4                           ! cfl, dt_input
+0.5 1.0e-3                           ! cfl, dt_input
 F                                    ! constant_dt
 ab2 fll                              ! time_scheme, space_scheme_mom
-0.588415 3.24975d-5                  ! rho_sp, mu_sp
+996.56 5.8331d-4                     ! density, dynamic viscosity
 zer F 0.0                            ! inivel, is_noise_vel, noise_vel
-F hkv                                ! is_wallturb, wallturb_type
+F hvk                                ! is_wallturb
 cfr                                  ! bulk_ftype
-30000 10. 0.1                        ! nstep,time_max,tw_max
-F T F                                ! stop_type(1:3)
+5000000 10. 0.1                      ! nstep,time_max,tw_max    
+T F F                                ! stop_type(1:3)
 F 2 1 T                              ! restart, num_max_chkpt, input_chkpt, latest
-10 100 50000 50000 3000 10000        ! icheck, iout0d, iout1d, iout2d, iout3d, isave
-P P  D D  D D                        ! cbcvel(0:1,1:3,1) [u BC type]
-P P  D D  D D                        ! cbcvel(0:1,1:3,2) [v BC type]
-P P  D D  D D                        ! cbcvel(0:1,1:3,3) [w BC type]
-P P  N N  N N                        ! cbcpre(0:1,1:3  ) [p BC type]
+10 1000 50000 10000 100000 10000     ! icheck, iout0d, iout1d, iout2d, iout3d, isave
+P P  P P  D D                        ! cbcvel(0:1,1:3,1) [u BC type]
+P P  P P  D D                        ! cbcvel(0:1,1:3,2) [v BC type]
+P P  P P  D D                        ! cbcvel(0:1,1:3,3) [w BC type]
+P P  P P  N N                        ! cbcpre(0:1,1:3  ) [p BC type]
 0. 0.  0. 0.  0. 0.                  !  bcvel(0:1,1:3,1) [u BC value]
 0. 0.  0. 0.  0. 0.                  !  bcvel(0:1,1:3,2) [v BC value]
 0. 0.  0. 0.  0. 0.                  !  bcvel(0:1,1:3,3) [w BC value]
 0. 0.  0. 0.  0. 0.                  !  bcpre(0:1,1:3  ) [p BC value]
 F F F                                ! is_forced(1:3)
-0. -9.81 0.                          ! gacc_x,gacc_y,gacc_z
+0. 0. -9.81                          ! gacc_x,gacc_y,gacc_z
 0. 0. 0.                             ! bvel_x,bvel_y,bvel_z
 0. 0. 0.                             ! dpdl_x,dpdl_y,dpdl_z
 F F  F F  F F                        ! is_outflow(0:1,1:3)
-2 2                                  ! dims_in(1:2)
+1 1                                  ! dims(1:2)
 4                                    ! numthreadsmax

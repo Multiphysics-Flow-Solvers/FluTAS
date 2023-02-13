@@ -1,0 +1,8 @@
+996.56 996.56 5.8331d-4 5.8331d-4  ! rho1, rho2, mu1,mu2
+bub			           ! inivof
+782 			           ! nbub
+0.5 0.5 0.5 0.125	           ! xc, yc, zc, r
+P P  P P  N N		           ! cbcvof
+0. 0. 0. 0. 0. 0. 	           ! bcvof
+0.0001488422  		           ! sigma
+T 10000000    	                   ! lateInit, i_lateInit

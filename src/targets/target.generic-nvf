@@ -25,9 +25,5 @@ USE_NVTX = 0
 FFTW_HOME := /data/nicolos/libraries/fftw-3.3.9
 LDFLAGS   += -L${FFTW_HOME}/lib -lfftw3
 
-# Required for INIT_MONTECARLO
-#GSL_LIB   += -lgsl -lgslcblas -lm -lstdc++
-#GSL_INC   += 
-
 # Required for NVTX
 # NVTX_LIB   +=

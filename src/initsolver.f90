@@ -3,8 +3,8 @@
 !
 module mod_initsolver
   !
+  use, intrinsic :: iso_c_binding, only: C_PTR
   use decomp_2d     , only: zstart
-  use iso_c_binding , only: C_PTR
   use mod_common_mpi, only: ijk_start_z,n_x,n_y,n_z
   use mod_fft       , only: fftini
   use mod_param     , only: pi

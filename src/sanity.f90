@@ -3,7 +3,6 @@
 !
 module mod_sanity
   !
-  use iso_c_binding , only: C_PTR
   use mpi
   use decomp_2d
   use mod_bound     , only: boundp,bounduvw,updt_rhs_b
@@ -14,7 +13,7 @@ module mod_sanity
   use mod_fillps    , only: fillps
   use mod_initmpi   , only: initmpi
   use mod_initsolver, only: initsolver
-  use mod_param     , only: small
+  use mod_param     , only: small,num_max_chkpt,input_chkpt
 #if defined(_OPENACC)
   use mod_solver_gpu, only: solver_gpu
 #else
@@ -53,12 +52,12 @@ module mod_sanity
     !
     logical :: passed
     !
-    call chk_dims(ng,dims,ipencil,passed);          if(.not.passed) call flutas_error
-    call chk_space_time_disc(passed);               if(.not.passed) call flutas_error
-    call chk_stop_type(stop_type,passed);           if(.not.passed) call flutas_error
-    call chk_bc(cbcvel,cbcpre,bcvel,bcpre,passed);  if(.not.passed) call flutas_error
-    call chk_outflow(cbcpre,is_outflow,passed);     if(.not.passed) call flutas_error
-    call chk_forcing(cbcpre,is_forced,passed);      if(.not.passed) call flutas_error
+    call chk_dims(ng,dims,ipencil,passed);         if(.not.passed) call flutas_error
+    call chk_space_time_disc(passed);              if(.not.passed) call flutas_error
+    call chk_stop_type(stop_type,passed);          if(.not.passed) call flutas_error
+    call chk_bc(cbcvel,cbcpre,bcvel,bcpre,passed); if(.not.passed) call flutas_error
+    call chk_outflow(cbcpre,is_outflow,passed);    if(.not.passed) call flutas_error
+    call chk_forcing(cbcpre,is_forced,passed);     if(.not.passed) call flutas_error
     ! 
     return
   end subroutine test_sanity
@@ -70,11 +69,30 @@ module mod_sanity
     logical, intent(in ), dimension(3) :: stop_type
     logical, intent(out)               :: passed
     !
+    logical :: passed_loc
+    !
     passed = .true.
+    !
+    passed_loc = .true.
     if(.not.any(stop_type(:))) then
       if(myid.eq.0) print*, 'ERROR: stopping criterion not chosen.'
-      passed = .false.
+      passed_loc = .false.
     endif
+    passed = passed.and.passed_loc
+    !
+    passed_loc = .true.
+    if(input_chkpt.gt.num_max_chkpt) then 
+      if(myid.eq.0) print*, 'ERROR: the user-defined restarting point cannot be greater than num_max_chkpt.'
+      passed_loc = .false. 
+    endif
+    passed = passed.and.passed_loc
+    !
+    passed_loc = .true.
+    if(num_max_chkpt.gt.999.or.input_chkpt.gt.999) then 
+      if(myid.eq.0) print*, 'ERROR: the number of checkpoints cannot be a number with more than 3 digits.'
+      passed_loc = .false. 
+    endif
+    passed = passed.and.passed_loc
     !
     return 
   end subroutine chk_stop_type
@@ -244,10 +262,12 @@ module mod_sanity
     !
     implicit none
     !
-    logical         , intent(in), dimension(0:1,3) :: is_outflow
-    character(len=1), intent(in), dimension(0:1,3) :: cbcpre
-    logical         , intent(out) :: passed
+    logical         , intent(in ), dimension(0:1,3) :: is_outflow
+    character(len=1), intent(in ), dimension(0:1,3) :: cbcpre
+    logical         , intent(out)                   :: passed
+    !
     integer :: idir,ibound
+    !
     passed = .true.
     !
     ! 1) check for compatibility between pressure BCs and outflow BC
@@ -278,6 +298,7 @@ module mod_sanity
     logical         , intent(out)                   :: passed
     !
     integer :: idir
+    !
     passed = .true.
     !
     ! 1) check for compatibility between pressure BCs and forcing BC

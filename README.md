@@ -20,13 +20,13 @@ We recommend new users to have a look at this document and to carefully read the
  * not yet...to come!
 
 ## Code structure
-To target different flow configurations, **FluTAS** has multiple `main.f90` each of one corresponding to a different application. Currently, we can target:
+To target different flow configurations, **FluTAS** has multiple `main__<APP>.f90`, each of one corresponding to a different application `<APP>`. Currently, the following applications are available:
 
- * Single-phase solver, optionally with heat transfer;
- * Multiphase flows, using the VoF MTHINC method to capture the interface;
- * Multiphase flows with heat transfer, solving the energy equation (Boussinesq effects can be included in the liquid and gas phase).
+ * Single-phase solver, optionally with heat transfer, under `main__single_phase.f90`;
+ * Multiphase flows, using the VoF MTHINC method to capture the interface, under `main__two_phase_inc_isot.f90`;
+ * Multiphase flows with heat transfer, solving the energy equation (Boussinesq effects can be included in the liquid and gas phase), under `main__two_phase_ht.f90`.
 
-In all the `main.f90`, different modules and subroutines are called and employed, depending on the specific problem under study. Although some apps are already present, more can be created by following the available templates. See the directory [`apps`](./src/apps/) for an overview of the existing applications.
+In all the `main__<APP>.f90`, different modules and subroutines are called and employed, depending on the specific problem under study. Although some apps are already present, more can be created by following the available templates. See the directory [`apps`](./src/apps/) for an overview of the existing applications.
 
 Additional features are:
 
@@ -47,9 +47,9 @@ Some examples of the flows that can be solved by FluTAS are:
 The above configurations can be numerically reproduced both in single and multiphase flows, with or without heat transfer effects, in CPUs and in GPUs.
  
 ## Compilation and usage
-Before compiling and using **FluTAS**, it is necessary to fulfill the prerequisites listed in [`REQ`](./getting_started/REQ.md). Once done, **FluTAS** can be compiled, run and the output can be visualized in Paraview. Details on how to perform all these tasks are provided as it follows:
+Before using **FluTAS**, it is necessary to fulfill the prerequisites listed in [`REQ`](./getting_started/REQ.md). Once done, **FluTAS** can be compiled, run and the output can be visualized in Paraview. Details on how to perform all these tasks are provided as it follows:
  * For information about compilation and generic use, please refer to [`HOW_TO_USE`](./getting_started/HOW_TO_USE.md)
- * For information about the required input files, i.e., the files with extension .in, please refer to [`INFO_INPUT`](./getting_started/INFO_INPUT.md)
+ * For information about the required input files, i.e., the files with extension **.in**, please refer to [`INFO_INPUT`](./getting_started/INFO_INPUT.md)
  * For information about how to visualize the output, please refer to [`INFO_VISU`](./getting_started/INFO_VISU.md)
 
 ## Notes

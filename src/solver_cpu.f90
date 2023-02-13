@@ -3,7 +3,7 @@
 !
 module mod_solver_cpu
   !
-  use iso_c_binding , only: C_PTR
+  use, intrinsic :: iso_c_binding, only: C_PTR
   use decomp_2d
   use mod_fft       , only: fft
   use mod_common_mpi, only: n_x,n_y,n_z

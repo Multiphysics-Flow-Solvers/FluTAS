@@ -35,16 +35,13 @@ def chkRes():
 # define execution variables
 wfold = os.getcwd()
 mainFold = wfold[:[_.start() for _ in re.finditer('/',wfold)][-1]]
-#compiler = 'generic-laptop'
-compiler = 'generic-nvf'
+compiler = 'generic-gnu'
+#compiler = 'generic-nvf'
 #compiler = 'generic-gpu'
 tfold = 'utils/testing/templateTest/'
 #
 doDBG = ['0']#,'1']
-#doDBG = ['1']#,'1']
-#doDBG = ['1']#,'1']
-#doCuda= ['1']
-doCuda= ['0']
+doCuda= ['1']
 doProc= ['2 2\n']#,'2 2\n']
 #doProc= ['1 1\n']#,'2 2\n']
 #doProc= ['1 2\n']#,'2 2\n']

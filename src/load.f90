@@ -7,13 +7,14 @@ module mod_load
   use mod_common_mpi, only: ierr,myid,ipencil
   use mod_param     , only: ng
   use mod_types     , only: rp
+  use mod_sanity    , only: flutas_error
   use decomp_2d
   use decomp_2d_io
   !
   implicit none
   !
   private
-  public  :: load,load_ns,load_scalar
+  public  :: load,load_ns,load_scalar,cmpt_it_chkpt
   !
   contains
   !
@@ -29,14 +30,26 @@ module mod_load
     real(rp)        , intent(inout), dimension(n(1),n(2),n(3)) :: fld ! generic field to be read/written
     !
     integer(MPI_OFFSET_KIND) :: filesize,disp,good
+    logical :: is_fld
     integer :: lenr,fh
     !
     select case(io)
     case('r')
+      !
+      ! check if the field <<fld>> exists
+      !
+      inquire(file=filename,exist=is_fld)
+      if(.not.is_fld.and.myid.eq.0) then
+        print*, ''
+        print*, '*** The restarting field ', filename, 'does not exist! ***'
+        print*, 'Please ensure that the field ', filename, 'has been printed in the correct restarting directory!'
+        call flutas_error
+      endif
+      !
       call MPI_FILE_OPEN(MPI_COMM_WORLD, filename, &
            MPI_MODE_RDONLY, MPI_INFO_NULL,fh, ierr)
       !
-      ! check file size first
+      ! check its size 
       !
       call MPI_FILE_GET_SIZE(fh,filesize,ierr)
       lenr = storage_size(fld(1,1,1))/8
@@ -52,7 +65,7 @@ module mod_load
         call exit
       endif
       !
-      ! read
+      ! read it
       !
       disp = 0_MPI_OFFSET_KIND
       call decomp_2d_read_var(fh,disp,ipencil,fld )
@@ -84,10 +97,24 @@ module mod_load
     integer         , intent(inout) :: istep
     real(rp)        , intent(inout) :: time, dto
     !
+    logical :: is_file
     integer :: fh
     !
     select case(io)
     case('r')
+      !
+      ! check if the file exists
+      !
+      inquire(file=filename,exist=is_file)
+      if(.not.is_file.and.myid.eq.0) then
+        print*, ''
+        print*, '*** The restarting field ', filename, 'does not exist! ***'
+        print*, 'Please ensure that the field ', filename, 'has been printed in the correct restarting directory!'
+        call flutas_error
+      endif
+      !
+      ! read it
+      !
       open(88,file=filename,status='old',action='read')
       read(88,*) time, dto, istep
       close(88)
@@ -104,7 +131,7 @@ module mod_load
   !
   subroutine load_ns(io,filename,n,u,v,w,p,time,istep)
     !
-    ! reads/writes a restart file
+    ! reads/writes a restart file in the CaNS's output format (see: https://github.com/CaNS-World/CaNS)
     !
     implicit none
     !
@@ -118,15 +145,26 @@ module mod_load
     real(rp)  , dimension(2) :: fldinfo
     integer(8), dimension(3) :: ng
     integer(8) :: lenr
-    integer    :: fh
+    logical :: is_fld
+    integer :: fh
     !
     select case(io)
     case('r')
       !
-      call MPI_FILE_OPEN(MPI_COMM_WORLD, filename                 , &
+      ! check if the field <<fld>> exists
+      !
+      inquire(file=filename,exist=is_fld)
+      if(.not.is_fld.and.myid.eq.0) then
+        print*, ''
+        print*, '*** The restarting field ', filename, 'does not exist! ***'
+        print*, 'Please ensure that ', filename, 'has been printed in the correct restarting directory!'
+        call flutas_error
+      endif
+      !
+      call MPI_FILE_OPEN(MPI_COMM_WORLD, filename, &
            MPI_MODE_RDONLY, MPI_INFO_NULL,fh, ierr)
       !
-      ! check file size first
+      ! check its size
       !
       call MPI_FILE_GET_SIZE(fh,filesize,ierr)
       !ng(:)   = n(:)
@@ -142,7 +180,7 @@ module mod_load
         call exit
       endif
       !
-      ! read
+      ! read it
       !
       disp = 0_MPI_OFFSET_KIND
       call decomp_2d_read_var(fh,disp,ipencil,u   )
@@ -175,5 +213,58 @@ module mod_load
     !
     return
   end subroutine load_ns
+  !
+  subroutine cmpt_it_chkpt(restart_dir,it_chkpt)
+    !
+    ! determine the checkpoint from which to restart the simulation
+    !
+    implicit none
+    !
+    character(len=*), intent(in ) :: restart_dir
+    integer         , intent(out) :: it_chkpt
+    !
+    real(rp), allocatable, dimension(:,:) :: mat_chkpt
+    integer :: i,nrow
+    logical :: is_file
+    !
+    ! check if the file "restart_checkpoints" exists 
+    !
+    inquire(file=trim(restart_dir)//'restart_checkpoints.out',exist=is_file)
+    if(.not.is_file.and.myid.eq.0) call flutas_error('The file <<restart_checkpoints.out>> is absent. Please, provide it')
+    if(.not.is_file.and.myid.eq.0) call flutas_error('In this case, the restarting files are probably missing. Check dns.in')
+    !
+    if(myid.eq.0) then ! only the first task
+      !
+      ! count the number line of the file "restart_checkpoints.out"
+      !
+      call execute_command_line('rm -f '//trim(restart_dir)//'line_of_restart.out') ! remove possible old files
+      call execute_command_line('cat '//trim(restart_dir)//'restart_checkpoints.out | & 
+                                 wc -l>> '//trim(restart_dir)//'line_of_restart.out')
+      !
+      ! get the number of line of the restarting file
+      !
+      open(10,file=trim(restart_dir)//'line_of_restart.out',status='old',action="read",iostat=ierr)
+      read(10,*) nrow
+      close(10)
+      !
+      ! go to the last line, third column, where the latest checkpoint is written
+      !
+      allocate(mat_chkpt(nrow,3))
+      open(10,file=trim(restart_dir)//'restart_checkpoints.out',status='old',action='read',iostat=ierr)
+      do i=1,nrow
+        read(10,*) mat_chkpt(i,1),mat_chkpt(i,2),mat_chkpt(i,3)
+      enddo
+      close(10)
+      it_chkpt = int(mat_chkpt(nrow,3))
+      deallocate(mat_chkpt)
+      !
+    endif
+    !
+    ! broadcast "it_chkpt" to all the other processors
+    !
+    call MPI_BCAST(it_chkpt,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
+    !
+    return
+  end subroutine cmpt_it_chkpt
   !
 end module mod_load

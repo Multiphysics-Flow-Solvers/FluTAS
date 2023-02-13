@@ -6,13 +6,6 @@ module mod_initflow
   use mpi
   use decomp_2d
   use mod_common_mpi, only: ierr,myid,ijk_start
-  use mod_param     , only: pi,dx,dy,dz,ng, &
-                            is_forced,bvel_x,bvel_y,bvel_z, &
-                            dpdl_x,dpdl_y,dpdl_z,small,bulk_ftype, &
-#if defined(_TURB_FORCING)
-                            u0_t, k0_t, abc_x, abc_y, abc_z, add_noise_abc, &
-#endif
-                            lx,ly,lz,is_wallturb,wallturb_type
   use mod_sanity    , only: flutas_error
   use mod_types
 #if defined(_OPENACC)
@@ -30,15 +23,25 @@ module mod_initflow
   !
   contains
   !
-  subroutine initflow(inivel,nx,ny,nz,dims,nh_d,nh_u,nh_p,rho_p,mu_p,zclzi,dzclzi,dzflzi,u,v,w,p)
+  subroutine initflow(inivel,nx,ny,nz,dims,is_noise_vel,noise_vel,nh_d,nh_u,nh_p,rho_p,mu_p,zclzi,dzclzi,dzflzi,u,v,w,p)
     !
     ! computes initial conditions for the velocity and pressure field
+    !
+    use mod_param, only: pi,dx,dy,dz, &
+                         is_forced,bvel_x,bvel_y,bvel_z, &
+                         dpdl_x,dpdl_y,dpdl_z,bulk_ftype,bcvel, &
+#if defined(_TURB_FORCING)
+                         u0_t,abc_x,abc_y,abc_z,k0_t,add_noise_abc, &
+#endif
+                         lx,ly,lz,is_wallturb,wallturb_type
     !
     implicit none
     !
     character(len=3), intent(in )                                     :: inivel
     integer         , intent(in )                                     :: nx,ny,nz
     integer         , intent(in ), dimension(3)                       :: dims
+    logical         , intent(in )                                     :: is_noise_vel
+    real(rp)        , intent(in )                                     :: noise_vel
     integer         , intent(in )                                     :: nh_d,nh_u,nh_p
     real(rp)        , intent(in )                                     :: rho_p,mu_p ! when we call initflow, we decide which phase
     real(rp)        , intent(in ), dimension(1-nh_d:)                 :: zclzi,dzclzi,dzflzi
@@ -52,79 +55,74 @@ module mod_initflow
 #endif
     real(rp), allocatable, dimension(:) :: u1d
     real(rp) :: q
-    real(rp) :: xc,yc,zc,xf,yf,zf
+    real(rp) :: xc,yc,zc,xf,yf,zf,norm_u
     integer  :: i,j,k,ijk_start_x,ijk_start_y,ijk_start_z
-    logical  :: is_noise,is_mean
-    real(rp) :: norm = 1._rp
+    logical  :: is_mean
     !
     allocate(u1d(nz))
-    ! TODO: prefetch/move on GPU async
-    !
-    is_noise = .false.
-    is_mean  = .false.
-    q = 0.5_rp
     !
     ijk_start_x = ijk_start(1)
     ijk_start_y = ijk_start(2)
     ijk_start_z = ijk_start(3)
     !
+    q       = 0.5_rp
+    is_mean = .false.
+    norm_u  = 1._rp ! default case: initial velocity magnitude equal to 1
+    !
+    ! we compute the appropriate norm_u depending on 'inivel'
+    !
     if(any(is_forced(:))) then
+      !
+      ! right norm_u for most of wall-bounded flows except for Couette
       !
       select case(bulk_ftype)
       case('cfr')
         if(    is_forced(1)) then
-          norm = bvel_x
+          norm_u = bvel_x
         elseif(is_forced(2)) then
-          norm = bvel_y
+          norm_u = bvel_y
         elseif(is_forced(3)) then 
-          norm = bvel_z
+          norm_u = bvel_z
         endif
       case('cpg')
-          norm = ((-(dpdl_x+dpdl_y+dpdl_z)*lz/2._rp/rho_p)**0.5*lz/2._rp/mu_p/0.09) 
-          norm = norm**(1._rp/0.88)*mu_p/lz ! compute norm to be consistent with the imposed dpdl_*
+        norm_u = ((-(dpdl_x+dpdl_y+dpdl_z)*lz/2._rp/rho_p)**0.5*lz/2._rp/mu_p/0.09) 
+        norm_u = norm_u**(1._rp/0.88)*mu_p/lz ! compute norm_u to be consistent with the imposed dpdl_*
       end select
       !
     else
       !
-      norm = 1._rp
+      ! other relevant cases:
+      !   1. Triperiodic cases: norm_u is not employed since we use u0_t. So we skip.
+      !   2. Gravity-driven flow (e.g. Rayleigh-Benard convection). We typically start with 
+      !      initial velocity equal to 0, i.e. case('zer') and trigger the scalar field to promote transition. So we skip. 
       !
     endif
     !
+    ! we compute the initial velocity field
+    !
     select case(inivel)
     case('cou')
-      call couette(   q,nz,nh_d,zclzi,norm,u1d)
+      norm_u = abs( bcvel(0,3,1)-bcvel(1,3,1) )   ! assumes that the z-direction is the wall-normal one 
+      call couette(   q,nz,nh_d,zclzi,norm_u,u1d)
     case('poi')
-      call poiseuille(q,nz,nh_d,zclzi,norm,u1d)
-      is_mean=.true.
+      norm_u = norm_u
+      call poiseuille(q,nz,nh_d,zclzi,norm_u,u1d)
+      is_mean = .true.
     case('zer')
-      !$acc kernels
-      do k=1,nz
-        do j=1,ny
-          do i=1,nx
-            u(i,j,k) = 0.0_rp
-            v(i,j,k) = 0.0_rp
-            w(i,j,k) = 0.0_rp
-          enddo
-        enddo
-      enddo
-      !$acc end kernels
-      u1d(:) = 0._rp
+      norm_u = 0._rp
+      u1d(:) = norm_u
     case('uni')
-      u1d(:) = 1._rp
+      norm_u = 1._rp
+      u1d(:) = norm_u
     case('log')
-      call log_profile(q,nz,nh_d,zclzi,mu_p,rho_p,lz,norm,u1d)
-      is_noise = .true.
-      is_mean  = .true.
-    !case('hcl')
-    !  deallocate(u1d)
-    !  allocate(u1d(2*nz))
-    !  call log_profile(q,2*nz,zclzi,visc,u1d)
-    !  is_noise = .true.
-    !  is_mean=.true.
+      norm_u = norm_u
+      call log_profile(q,nz,nh_d,zclzi,mu_p,rho_p,lz,norm_u,u1d)
+      is_mean = .true.
     case('hcp')
+      norm_u = norm_u
       deallocate(u1d)
       allocate(u1d(2*nz))
-      call poiseuille(q,2*nz,nh_d,zclzi,norm,u1d)
+      call poiseuille(q,2*nz,nh_d,zclzi,norm_u,u1d)
       is_mean = .true.
 #if defined(_TURB_FORCING)
     case('tgv')
@@ -181,13 +179,21 @@ module mod_initflow
       call flutas_error('Error: invalid name of the initial velocity field. Simulation aborted. Check dns.in')
     end select
     !
+    ! we set the initial velocity field
+    !   note: in 2D, we solve the governing equations along the y and z direction. The x-velocity is set to 0 
+    !
     if((inivel.ne.'tgv').and.(inivel.ne.'abc')) then
       !$acc kernels
       do k=1,nz
         do j=1,ny
           do i=1,nx
+#if defined(_TWOD)
+            u(i,j,k) = 0._rp
+            v(i,j,k) = u1d(k)
+#else
             u(i,j,k) = u1d(k)
             v(i,j,k) = 0._rp
+#endif
             w(i,j,k) = 0._rp
             p(i,j,k) = 0._rp
           enddo
@@ -199,10 +205,15 @@ module mod_initflow
     ! set the mean velocity
     !
     if(is_mean) then
-      call set_mean(nx,ny,nz,nh_d,dims,dzclzi,norm,u(1:nx,1:ny,1:nz))
+#if defined(_TWOD)
+      call set_mean(nx,ny,nz,nh_d,lx,ly,lz,dx,dy,dz,dzclzi,norm_u,v(1:nx,1:ny,1:nz))
+#else
+      call set_mean(nx,ny,nz,nh_d,lx,ly,lz,dx,dy,dz,dzclzi,norm_u,u(1:nx,1:ny,1:nz))
+#endif
     endif
     !
-    ! add disturbance to the velocity for wall-bounded turbulence
+    ! we superimpose a disturbance to the velocity components (v,w) 
+    ! This option is very convenient in triggering transition for wall-bounded turbulent flows
     !
     if(is_wallturb) then
       !
@@ -230,9 +241,9 @@ module mod_initflow
               xc = ((ijk_start_x+i-0.5_rp)*dx-0.5_rp*lx)*2._rp/lz
               xf = ((ijk_start_x+i-0.0_rp)*dx-0.5_rp*lx)*2._rp/lz
               !
-              !u(i,j,k) = u1d(k)
-              v(i,j,k) =  1._rp * fz(zc)*dgxy(yf,xc)*norm*1.5_rp
-              w(i,j,k) = -1._rp * gxy(yc,xc)*dfz(zf)*norm*1.5_rp
+              !u(i,j,k) = u1d(k) ! we do not touch the x-velocity
+              v(i,j,k) =  1._rp * fz(zc)*dgxy(yf,xc)*norm_u*1.5_rp
+              w(i,j,k) = -1._rp * gxy(yc,xc)*dfz(zf)*norm_u*1.5_rp
               p(i,j,k) = 0._rp
               !
             enddo
@@ -255,9 +266,9 @@ module mod_initflow
               xc = (i+ijk_start_x-0.5_rp)*dx/lx*2._rp*pi
               xf = (i+ijk_start_x-0.0_rp)*dx/lx*2._rp*pi
               !
-              !u(i,j,k) = u1d(k)
-              v(i,j,k) =  sin(xc)*cos(yf)*cos(zc)*norm
-              w(i,j,k) = -cos(xc)*sin(yc)*cos(zf)*norm
+              !u(i,j,k) = u1d(k) ! we do not touch the x-velocity
+              v(i,j,k) =  sin(xc)*cos(yf)*cos(zc)*norm_u
+              w(i,j,k) = -cos(xc)*sin(yc)*cos(zf)*norm_u
               p(i,j,k) = 0._rp!(cos(2.*xc)+cos(2.*yc))*(cos(2.*zc)+2.)/16.
               !
             enddo
@@ -273,10 +284,10 @@ module mod_initflow
     !
     ! add noise
     !
-    if(is_noise) then
-      call add_noise(nx,ny,nz,dims,123,0.5_rp,u(1:nx,1:ny,1:nz))
-      call add_noise(nx,ny,nz,dims,456,0.5_rp,v(1:nx,1:ny,1:nz))
-      call add_noise(nx,ny,nz,dims,789,0.5_rp,w(1:nx,1:ny,1:nz))
+    if(is_noise_vel) then
+      call add_noise(nx,ny,nz,dims,123,noise_vel,u(1:nx,1:ny,1:nz))
+      call add_noise(nx,ny,nz,dims,456,noise_vel,v(1:nx,1:ny,1:nz))
+      call add_noise(nx,ny,nz,dims,789,noise_vel,w(1:nx,1:ny,1:nz))
       !
 #if defined(_TWOD)
       !
@@ -286,9 +297,9 @@ module mod_initflow
       do k=1,nz
         do j=1,ny
           do i=1,nx
-            u(i,j,k) = u(nx/2,j,k)
-            v(i,j,k) = v(nx/2,j,k)
-            w(i,j,k) = w(nx/2,j,k)
+            u(i,j,k) = 0._rp
+            v(i,j,k) = v(nx,j,k)
+            w(i,j,k) = w(nx,j,k)
           enddo
         enddo
       enddo
@@ -299,9 +310,9 @@ module mod_initflow
   end subroutine initflow
   !
 #if defined(_HEAT_TRANSFER)
-  subroutine inittmp(initmp,nx,ny,nz,nh_t,dims,is_noise,norm_t, &
+  subroutine inittmp(initmp,nx,ny,nz,nh_t,dims,is_noise_tmp,noise_tmp, &
 #if defined(_USE_VOF)
-                     nh_v,vof, &
+                     nh_v,psi, &
 #endif
                      tmp)
     !
@@ -318,12 +329,12 @@ module mod_initflow
     integer         , intent(in )                                     :: nx,ny,nz
     integer         , intent(in )                                     :: nh_t
     integer         , intent(in ), dimension(3)                       :: dims
-    logical         , intent(in )                                     :: is_noise
-    real(rp)        , intent(in )                                     :: norm_t
+    logical         , intent(in )                                     :: is_noise_tmp
+    real(rp)        , intent(in )                                     :: noise_tmp
 #if defined(_USE_VOF)
     integer         , intent(in )                                     :: nh_v
-    real(rp)        , intent(in ), dimension(1-nh_v:,1-nh_v:,1-nh_v:) :: vof
-    !@cuf attributes(managed) :: vof
+    real(rp)        , intent(in ), dimension(1-nh_v:,1-nh_v:,1-nh_v:) :: psi
+    !@cuf attributes(managed) :: psi
 #endif
     real(rp)        , intent(out), dimension(1-nh_t:,1-nh_t:,1-nh_t:) :: tmp
     !
@@ -348,7 +359,7 @@ module mod_initflow
       do k=1,nz
         do j=1,ny
           do i=1,nx
-            tmp(i,j,k) = tg0*vof(i,j,k)+tl0*(1._rp-vof(i,j,k))
+            tmp(i,j,k) = tl0*psi(i,j,k)+tg0*(1._rp-psi(i,j,k))
           enddo
         enddo
       enddo
@@ -359,11 +370,11 @@ module mod_initflow
       call flutas_error('Error: invalid name of the initial temperature field. Simulation aborted. Check heat_transfer.in')
     end select
     !
-    if(is_noise)then
+    if(is_noise_tmp) then
 #if defined(_OPENACC)
-      call add_noise_cuda(nx,ny,nz,dims,123456,norm_t,tmp(1:nx,1:ny,1:nz))
+      call add_noise_cuda(nx,ny,nz,dims,123456,noise_tmp,tmp(1:nx,1:ny,1:nz))
 #else
-      call add_noise(     nx,ny,nz,dims,123456,norm_t,tmp(1:nx,1:ny,1:nz))
+      call add_noise(     nx,ny,nz,dims,123456,noise_tmp,tmp(1:nx,1:ny,1:nz))
 #endif
       !
       ! in the next, we ensure that if noise is applied, the initial condition is kept
@@ -373,7 +384,7 @@ module mod_initflow
       do k=1,nz
         do j=1,ny
           do i=1,nx
-            tmp(i,j,k) = tmp(nx/2,j,k)
+            tmp(i,j,k) = tmp(nx,j,k)
           enddo
         enddo
       enddo
@@ -384,60 +395,6 @@ module mod_initflow
   end subroutine inittmp
 #endif   
   !
-#if defined(_USE_VOF)
-  subroutine init_surf_tension(nx,ny,nz,dxi,dyi,dzi,nh_d,dzci,kappa,psi,rho, &
-                               ssx_o,ssy_o,ssz_o,ssx,ssy,ssz)
-    !
-    ! computes initial conditions for the surface tension
-    !
-    use mod_param,  only: sigma
-    !
-    implicit none
-    !
-    integer , intent(in )                      :: nx,ny,nz
-    real(rp), intent(in )                      :: dxi,dyi,dzi
-    integer , intent(in )                      :: nh_d
-    real(rp), intent(in ), dimension(1-nh_d:)  :: dzci
-    real(rp), intent(in ), dimension(0:,0:,0:) :: kappa,psi,rho
-    real(rp), intent(out), dimension(0:,0:,0:) :: ssx_o,ssy_o,ssz_o,ssx,ssy,ssz
-    !
-    real(rp) :: rhox,rhoy,rhoz,kappasx,kappasy,kappasz
-    integer  :: i,j,k,ip,jp,kp
-    !
-    !$OMP PARALLEL DO DEFAULT(none) &
-    !$OMP PRIVATE(i,j,k,ip,jp,kp) &
-    !$OMP PRIVATE(kappasx,kappasy,kappasz,rhox,rhoy,rhoz,sigma) &
-    !$OMP SHARED(n,rho,psi,kappa,ssx_p,ssy_p,ssz_p,ssx,ssy,ssz)
-    do k=1,nz
-      do j=1,ny
-        do i=1,nx
-          !
-          ip = i + 1
-          jp = j + 1
-          kp = k + 1
-          !
-          rhox    = 0.5_rp*(rho(ip,j,k)+rho(i,j,k))
-          rhoy    = 0.5_rp*(rho(i,jp,k)+rho(i,j,k))
-          rhoz    = 0.5_rp*(rho(i,j,kp)+rho(i,j,k))
-          kappasx = 0.5_rp*(kappa(ip,j,k)+kappa(i,j,k))
-          kappasy = 0.5_rp*(kappa(i,jp,k)+kappa(i,j,k))
-          kappasz = 0.5_rp*(kappa(i,j,kp)+kappa(i,j,k))
-          !
-          ssx(i,j,k)   = dxi*sigma*kappasx*(psi(ip,j,k)-psi(i,j,k)) 
-          ssx_o(i,j,k) = ssx(i,j,k)
-          ssy(i,j,k)   = dyi*sigma*kappasy*(psi(i,jp,k)-psi(i,j,k)) 
-          ssy_o(i,j,k) = ssy(i,j,k) 
-          ssz(i,j,k)   = dzci(k)*sigma*kappasz*(psi(i,j,kp)-psi(i,j,k)) 
-          ssz_o(i,j,k) = ssz(i,j,k) 
-          !
-        enddo
-      enddo
-    enddo
-    !
-    return
-  end subroutine init_surf_tension
-#endif
-  ! 
   subroutine add_noise(nx,ny,nz,dims,iseed,norm,p)
     !
     implicit none
@@ -461,6 +418,10 @@ module mod_initflow
     nxg = nx*dims(1)
     nyg = ny*dims(2)
     nzg = nz*dims(3)
+    !
+    ijk_start_x = ijk_start(1)
+    ijk_start_y = ijk_start(2)
+    ijk_start_z = ijk_start(3)
     !
     do k=1,nzg
       do j=1,nyg
@@ -507,6 +468,10 @@ module mod_initflow
     nyg = ny*dims(2)
     nzg = nz*dims(3)
     !
+    ijk_start_x = ijk_start(1)
+    ijk_start_y = ijk_start(2)
+    ijk_start_z = ijk_start(3)
+    !
     !$acc parallel num_gangs(1) vector_length(1) private(h)
     call curand_init(iseed,0,0,h)
     !$acc loop seq
@@ -522,7 +487,7 @@ module mod_initflow
           if(ii.ge.1.and.ii.le.nx .and. &
              jj.ge.1.and.jj.le.ny .and. &
              kk.ge.1.and.kk.le.nz ) then
-             p(ii,jj,kk) = p(ii,jj,kk) + 2.*(rn-.5)*norm
+             p(ii,jj,kk) = p(ii,jj,kk) + 2._rp*(rn-0.5_rp)*norm
           endif
           !
         enddo
@@ -534,13 +499,14 @@ module mod_initflow
   end subroutine add_noise_cuda
 #endif
   !
-  subroutine set_mean(nx,ny,nz,nh_d,dims,dzlzi,mean,p)
+  subroutine set_mean(nx,ny,nz,nh_d,lx,ly,lz,dx,dy,dz,dzlzi,mean,p)
     !
     implicit none
     !
     integer , intent(in   )                      :: nx,ny,nz
     integer , intent(in   )                      :: nh_d
-    integer , intent(in   ), dimension(3)        :: dims
+    real(rp), intent(in   )                      :: lx,ly,lz
+    real(rp), intent(in   )                      :: dx,dy,dz
     real(rp), intent(in   ), dimension(1-nh_d:)  :: dzlzi 
     real(rp), intent(in   )                      :: mean
     real(rp), intent(inout), dimension(nx,ny,nz) :: p
@@ -557,14 +523,14 @@ module mod_initflow
     do k=1,nz
       do j=1,ny
         do i=1,nx
-          meanold = meanold + p(i,j,k)*dzlzi(k)
+          meanold = meanold + p(i,j,k)*dx*dy*dzlzi(k)
         enddo
       enddo
     enddo
     !$OMP END PARALLEL DO
-    !@
+    !
     call mpi_allreduce(MPI_IN_PLACE,meanold,1,MPI_REAL_RP,MPI_SUM,MPI_COMM_WORLD,ierr)
-    meanold = meanold/(1._rp*nx*dims(1)*ny*dims(2))
+    meanold = meanold/(1._rp*lx*ly) ! already divided by lz in the i,j,k loop
     !
     if(meanold.ne.0._rp) then
       !$OMP WORKSHARE

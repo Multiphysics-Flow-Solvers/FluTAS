@@ -1,4 +1,4 @@
-uni                       ! initmp (options are 'uni' and 'sin')
+uni F 0.0                 ! initmp, is_noise_tmp, noise_tmp
 600.d0                    ! tmp0 (init. temp. in the domain)
 1004.5d0                  ! cp_sp
 717.5d0                   ! cv_sp

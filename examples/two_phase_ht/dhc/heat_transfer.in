@@ -1,4 +1,4 @@
-uni                            ! initmp (options are 'uni' and 'sin')
+uni F 0.0                      ! initmp, is_noise_tmp, noise_tmp
 600.d0 600.d0                  ! tl0, tg0 (init. temp. of liquid and gas in case of 'sin')
 1004.5d0 1004.5d0              ! cp1, cp2
 717.5d0  717.5d0               ! cv1, cv2

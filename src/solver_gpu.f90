@@ -1,6 +1,6 @@
 module mod_solver_gpu
   !
-  use iso_c_binding , only: C_PTR
+  use, intrinsic :: iso_c_binding, only: C_PTR
   use decomp_2d
   use mod_types
 #if defined(_OPENACC)

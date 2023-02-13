@@ -1,0 +1,10 @@
+uni T 0.5                  ! initmp, is_noise_tmp, noise_tmp
+300.d0 300.d0              ! tl0, tg0 (init. temp. of liquid and gas in case of 'sin')
+4180.0d0 4180.0d0          ! cp1, cp2     !@ 300.0 K:   Cp_water = 4180.0d0 J/(kg.K)   
+4130.0d0 4130.0d0          ! cv1, cv2     !@ 300.0 K:   Cv_water = 4130.0d0 J/(kg.K)               
+0.60956 0.60956 	   ! kappa1 kappa2   ! water thermal conductivity W/(m.K)  @ 300.0 K    
+P P  P P  D D              ! cbctmp(0:1,1:3) [T BC type]
+0. 0.  0. 0.  305. 295.    ! bctmp(0:1,1:3)  [T BC value]  delta_T=10       !!!   default values were: 960.  240.
+300.0 0.1 0.1              ! T0, beta_th = 1/T0 for ideal gas !if Fr = 1--> beta=1/delta_t  !for water @ 300.0 K:beta_th = 2.754d-4 (1/K) 
+287.0                      ! [J*kg^(-1)*K^(-1)] gas constant   ! for Air = 287.05 J/(kg.K)
+101325.0                   ! p0_0=(1.d0/1.5d0)*9.d0*10.d4

@@ -26,6 +26,8 @@ module mod_param
   character(len=3)                     :: time_scheme,space_scheme_mom
   real(rp)                             :: rho_sp,mu_sp
   character(len=100)                   :: inivel
+  logical                              :: is_noise_vel
+  real(rp)                             :: noise_vel
   logical                              :: is_wallturb
   character(len=3)                     :: wallturb_type
   character(len=3)                     :: bulk_ftype
@@ -33,6 +35,8 @@ module mod_param
   real(rp)                             :: time_max,tw_max
   logical, dimension(3)                :: stop_type
   logical                              :: restart
+  integer                              :: num_max_chkpt, input_chkpt
+  logical                              :: latest
   integer                              :: icheck,iout0d,iout1d,iout2d,iout3d,isave
   character(len=1), dimension(0:1,3,3) :: cbcvel
   real(rp)        , dimension(0:1,3,3) :: bcvel
@@ -60,6 +64,8 @@ module mod_param
   !  --> from heat_transfer.in (always defined in this app)
   !
   character(len=3) :: initmp
+  logical          :: is_noise_tmp
+  real(rp)         :: noise_tmp
   real(rp)         :: cp1,cv1,kappa1
   real(rp)         :: cp2,cv2,kappa2
   real(rp)         :: tl0,tg0
@@ -149,12 +155,12 @@ module mod_param
       read(iunit,*) constant_dt
       read(iunit,*) time_scheme, space_scheme_mom
       read(iunit,*) rho_sp, mu_sp
-      read(iunit,*) inivel
+      read(iunit,*) inivel, is_noise_vel, noise_vel
       read(iunit,*) is_wallturb,wallturb_type
       read(iunit,*) bulk_ftype
       read(iunit,*) nstep,time_max,tw_max
       read(iunit,*) stop_type(1),stop_type(2),stop_type(3)
-      read(iunit,*) restart
+      read(iunit,*) restart, num_max_chkpt, input_chkpt, latest
       read(iunit,*) icheck,iout0d,iout1d,iout2d,iout3d,isave
       read(iunit,*) cbcvel(0,1,1),cbcvel(1,1,1),cbcvel(0,2,1),cbcvel(1,2,1),cbcvel(0,3,1),cbcvel(1,3,1)
       read(iunit,*) cbcvel(0,1,2),cbcvel(1,1,2),cbcvel(0,2,2),cbcvel(1,2,2),cbcvel(0,3,2),cbcvel(1,3,2)
@@ -227,7 +233,7 @@ module mod_param
     !
     open(newunit=iunit,file='heat_transfer.in',status='old',action='read',iostat=ierr)
     if( ierr.eq.0 ) then
-      read(iunit,*) initmp
+      read(iunit,*) initmp, is_noise_tmp, noise_tmp
       read(iunit,*) tl0,tg0
       read(iunit,*) cp1,cp2
       read(iunit,*) cv1,cv2

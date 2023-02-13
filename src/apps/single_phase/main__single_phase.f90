@@ -8,7 +8,7 @@
 !  b. Feautures of FluTAS_single_phase:                                                        
 !      --> single-phase solver, optionally with heat transfer;
 !      --> Oberbeck-Boussinesq approximation; 
-!      --> momentum advanced with Adams-Bashforth (explicit diffusion);                 
+!      --> momentum equation advanced with 2nd-order Adams-Bashforth or 3rd-order Runge-Kutta (explicit diffusion);                 
 !      --> pressure equation solved with FFT-based direct solver.                                       
 !--------------------------------------------------------------------------------------------------------------------
 !
@@ -17,7 +17,8 @@ program flutas
   ! module declaration 
   !  note: --> import what you really neeed 
   !
-  use iso_c_binding , only: C_PTR
+  use, intrinsic :: iso_c_binding  , only: C_PTR
+  use, intrinsic :: ieee_arithmetic, only: ieee_is_nan
   use mpi
   use decomp_2d
   use mod_bound     , only: boundp,updt_rhs_b,bounduvw
@@ -35,19 +36,21 @@ program flutas
   use mod_initmpi   , only: alloc_buf
 #endif
   use mod_initsolver, only: initsolver
-  use mod_load      , only: load, load_scalar
+  use mod_load      , only: load, load_scalar, cmpt_it_chkpt
   use mod_rk        , only: rk,cmpt_time_factors
   use mod_output    , only: out0d,out1d,out2d,out3d,write_visu_2d,write_visu_3d
   use mod_param     , only: lx,ly,lz,dx,dy,dz,dxi,dyi,dzi,small, &
                             cbcvel,bcvel,cbcpre,bcpre, &
                             icheck,iout0d,iout1d,iout2d,iout3d,isave, &
                             nstep,time_max,tw_max,stop_type,restart, &
+                            num_max_chkpt, input_chkpt, latest, &
                             cfl,     &
                             constant_dt,dt_input, &
                             inivel,  &
                             itot,jtot,ktot,dims_in, &
                             nthreadsmax,gr, &
                             is_outflow,no_outflow,is_forced,rho_sp,mu_sp, &
+                            is_noise_vel, noise_vel, &
 #if defined(_DO_POSTPROC)
                             do_avg,time_deltai,&
                             avg_dir,&
@@ -58,6 +61,7 @@ program flutas
                             initmp, &
                             cbctmp,bctmp, &
                             kappa_sp,cp_sp, &
+                            is_noise_tmp, noise_tmp, &
 #endif
                             n,ng,l,dl,dli, &
                             bulk_ftype,rkcoeff, &
@@ -141,10 +145,11 @@ program flutas
   real(rp), dimension(20) :: var
   ! 
   character(len=9)   :: fldnum
+  character(len=3)   :: cnum_ichkpt
   character(len=100) :: datadir,restart_dir
-  real(rp) :: f1d,f2d,f3d
+  character(len=100), allocatable, dimension(:) :: restart_subdir
   real(rp) :: twi,tw
-  integer :: kk
+  integer :: it,kk,it_chkpt
   logical :: is_done,kill
   !
   !@cuf integer :: istat
@@ -193,15 +198,29 @@ program flutas
   !
   call read_input(myid)
   !
-  ! create data folder and subfolders for post-processing, if they do not exist.
+  ! create data folder and subfolders for restating files and post-processing (if they do not exist).
+  !
+  ! --> generic data directory
   !
   inquire(file='data/',exist=is_data)
   if(.not.is_data.and.myid.eq.0) call execute_command_line('mkdir -p data')
   datadir = 'data/'
   !
+  ! --> restarting directory (one general and num_max_chkpt subfolders)
+  !
   inquire(file='data/restart_dir/',exist=is_data)
   if(.not.is_data.and.myid.eq.0) call execute_command_line('mkdir -p data/restart_dir')
   restart_dir = 'data/restart_dir/'
+  !
+  allocate(restart_subdir(num_max_chkpt))
+  do it=1,num_max_chkpt ! we create one folder for each restarting checkpoint
+    write(cnum_ichkpt,'(i3.3)') it
+    inquire(file=trim(restart_dir)//'restart_subdir_/'//trim(cnum_ichkpt),exist=is_data)
+    if(.not.is_data.and.myid.eq.0) call execute_command_line('mkdir -p '//trim(restart_dir)//'restart_subdir_'//trim(cnum_ichkpt))
+    restart_subdir(it) = trim(restart_dir)//'restart_subdir_'//trim(cnum_ichkpt)//'/'
+  enddo
+  !
+  ! --> postprocessing 
   !
 #if defined(_DO_POSTPROC)
   inquire(file='data/post/',exist=is_data)
@@ -398,20 +417,21 @@ program flutas
   !
   if(.not.restart) then
     !
-    istep = 0
-    time  = 0._rp
+    istep    = 0
+    time     = 0._rp
+    it_chkpt = 0 
     !
 #if defined(_HEAT_TRANSFER)
     !
     ! Initialize temperature 
     !
-    call inittmp(initmp,n(1),n(2),n(3),nh_t,dims,.false.,0.5d0,tmp)
+    call inittmp(initmp,n(1),n(2),n(3),nh_t,dims,is_noise_tmp,noise_tmp,tmp)
     !@cuf istat = cudaMemPrefetchAsync(tmp, size(tmp), mydev, 0)
     call boundp(cbctmp,n,bctmp,nh_d,nh_t,halo_t,dl,dzc,dzf,tmp)
     !
 #endif
     !
-    call initflow(inivel,n(1),n(2),n(3),dims,nh_d,nh_u,nh_p,rho_sp,mu_sp,zc/lz,dzc/lz,dzf/lz,u,v,w,p)
+    call initflow(inivel,n(1),n(2),n(3),dims,is_noise_vel,noise_vel,nh_d,nh_u,nh_p,rho_sp,mu_sp,zc/lz,dzc/lz,dzf/lz,u,v,w,p)
     !
     !$acc kernels
     do k=1,n3
@@ -442,24 +462,36 @@ program flutas
     !
   else
     !
+    ! choose the checkpoint from which to start 
+    !
+    if(latest) then ! latest avaiable field
+      call cmpt_it_chkpt(restart_dir,it_chkpt)
+    else ! user-defined choice (e.g. useful for debugging purpose)
+      it_chkpt = input_chkpt
+    endif
+    !
+    if(myid.eq.0) print*, '*** Latest or chosen checkpoint number:', it_chkpt, '. ***'
+    !
+    ! load the required starting files from the desired checkpoint, i.e. it_chkpt
+    !
     action_load = 'r'
     !
-    call load(action_load,trim(restart_dir)//'fldu.bin',n,      u(1:n(1),1:n(2),1:n(3)))
-    call load(action_load,trim(restart_dir)//'fldv.bin',n,      v(1:n(1),1:n(2),1:n(3)))
-    call load(action_load,trim(restart_dir)//'fldw.bin',n,      w(1:n(1),1:n(2),1:n(3)))
-    call load(action_load,trim(restart_dir)//'fldp.bin',n,      p(1:n(1),1:n(2),1:n(3)))
+    call load(action_load,trim(restart_subdir(it_chkpt))//'fldu.bin',n,u(1:n(1),1:n(2),1:n(3)))
+    call load(action_load,trim(restart_subdir(it_chkpt))//'fldv.bin',n,v(1:n(1),1:n(2),1:n(3)))
+    call load(action_load,trim(restart_subdir(it_chkpt))//'fldw.bin',n,w(1:n(1),1:n(2),1:n(3)))
+    call load(action_load,trim(restart_subdir(it_chkpt))//'fldp.bin',n,p(1:n(1),1:n(2),1:n(3)))
     if(time_scheme.ne.'rk3') then ! RK3 is self-restarting
-      call load(action_load,trim(restart_dir)//'flddu.bin',n,dudtrko(1:n(1),1:n(2),1:n(3)))
-      call load(action_load,trim(restart_dir)//'flddv.bin',n,dvdtrko(1:n(1),1:n(2),1:n(3)))
-      call load(action_load,trim(restart_dir)//'flddw.bin',n,dwdtrko(1:n(1),1:n(2),1:n(3)))
+      call load(action_load,trim(restart_subdir(it_chkpt))//'flddu.bin',n,dudtrko(1:n(1),1:n(2),1:n(3)))
+      call load(action_load,trim(restart_subdir(it_chkpt))//'flddv.bin',n,dvdtrko(1:n(1),1:n(2),1:n(3)))
+      call load(action_load,trim(restart_subdir(it_chkpt))//'flddw.bin',n,dwdtrko(1:n(1),1:n(2),1:n(3)))
     endif
 #if defined(_HEAT_TRANSFER)
-    call load(action_load,trim(restart_dir)//'fldtmp.bin',n,    tmp(1:n(1),1:n(2),1:n(3)))
+    call load(action_load,trim(restart_subdir(it_chkpt))//'fldtmp.bin',n,tmp(1:n(1),1:n(2),1:n(3)))
     if(time_scheme.ne.'rk3') then ! RK3 is self-restarting
-      call load(action_load,trim(restart_dir)//'flddtmp.bin',n,dtmpdtrkold(1:n(1),1:n(2),1:n(3)))
+      call load(action_load,trim(restart_subdir(it_chkpt))//'flddtmp.bin',n,dtmpdtrkold(1:n(1),1:n(2),1:n(3)))
     endif
 #endif
-    call load_scalar(action_load,trim(restart_dir)//'scalar.out',time,istep,dto)
+    call load_scalar(action_load,trim(restart_subdir(it_chkpt))//'scalar.out',time,istep,dto)
     !
     if(myid.eq.0) print*, '*** Checkpoint loaded at time = ', time, 'time step = ', istep, '. ***'
     !
@@ -582,10 +614,6 @@ program flutas
     !
     call profiler_start("STEP", tag = .true., tag_color = COLOR_WHITE)
     !
-    time  = time + dt
-    !
-    if(myid.eq.0) print*, 'Timestep #', istep, 'Time = ', time
-    !
     if(any(is_forced(:))) dpdl_c(1:3) = 0._rp
     !
     do irk_ss = 1,n_stage ! n_stage=1 for AB2, n_stage=3 for RK3
@@ -594,6 +622,7 @@ program flutas
       !
       call cmpt_time_factors(time_scheme,restart,istep,irk_ss,rkcoeff,dt,dto,f_t1,f_t2,f_t12)
       f_t12_i = 1._rp/f_t12
+      time    = time + f_t12
       !
 #if defined(_HEAT_TRANSFER)
       !
@@ -617,7 +646,7 @@ program flutas
       call rk(space_scheme_mom,f_t1,f_t2,n(1),n(2),n(3),dxi,dyi,dzi,nh_d,nh_u,dzci,dzfi, &
               u,v,w,mu,rho,dudtrko,dvdtrko,dwdtrko)
       !
-      ! 2b. add the source terms
+      ! 2a. add the source terms
       !
       ! --> add gravity terms
       !
@@ -652,7 +681,7 @@ program flutas
       !
       call profiler_stop("RK")
       !
-      ! 2c. construct the Poisson equation
+      ! 2b. construct the Poisson equation
       !
 #if defined(_OPENACC)
       !$acc parallel loop collapse(3) present(p, pold)
@@ -692,7 +721,7 @@ program flutas
       !
       call profiler_start("CORREC")
       !
-      ! 2d. correct the velocity and update the pressure
+      ! 2c. correct the velocity and update the pressure
       !
       call correc(n(1),n(2),n(3),nh_d,nh_u,dxi,dyi,dzi,dzci,f_t12,rho_sp,p,u,v,w,rho)
       call bounduvw(cbcvel,n,bcvel,nh_d,nh_u,halo_u,is_outflow,dl,dzc,dzf,u,v,w)
@@ -721,6 +750,7 @@ program flutas
       !
     enddo
     !
+    if(myid.eq.0) print*, 'Timestep #', istep, 'Time = ', time
     write(fldnum,'(i9.9)') istep
     !
     ! 3. post-processing
@@ -803,6 +833,12 @@ program flutas
       !
       if(myid.eq.0) print*, 'checking the velocity divergence ...'
       call chkdiv(n(1),n(2),n(3),dxi,dyi,dzi,nh_d,nh_u,dzfi,u,v,w,divtot,divmax)
+      if(divmax.gt.small.or.ieee_is_nan(divtot)) then
+        if(myid.eq.0) print*, 'ERROR: maximum divergence is too large.'
+        if(myid.eq.0) print*, 'Aborting...'
+        is_done = .true.
+        kill = .true.
+      endif
       !
     endif
     !
@@ -833,7 +869,7 @@ program flutas
         var(8)   = meanvelu
         var(9)   = meanvelv
         var(10)  = meanvelw
-        var(11)  = rho_sp*var(8)*lz/mu_sp ! Re_bulk
+        var(11)  = rho_sp*maxval(abs(var(8:10)))*lz/mu_sp ! Re_bulk
         call out0d(trim(datadir)//'forcing.out',11,var)
       endif 
       !
@@ -879,61 +915,50 @@ program flutas
       !@cuf istat = cudaMemPrefetchAsync(dtmpdtrkold, size(dtmpdtrkold), cudaCpuDeviceId, 0)  
 #endif
       !
-      inquire(file='data/fldu.bin', exist=is_data)
-      if(myid.eq.0.and.is_data) call execute_command_line('mv data/fldu.bin   data/fldu_old.bin')
-      call load(action_load,trim(restart_dir)//'fldu.bin',n,      u(1:n(1),1:n(2),1:n(3)))
+      ! a. decide to write a new checkpoint or to overwrite an existing one 
+      !
+      if(it_chkpt.lt.num_max_chkpt) then
+        it_chkpt = it_chkpt + 1 
+      else
+        it_chkpt = 1            ! we start the counting and we touch the subfolder it_chkpt=1
+      endif
+      !
+      ! b. write a new checkpoint or overwrite an old one
+      !
+      call load(action_load,trim(restart_subdir(it_chkpt))//'fldu.bin',n,u(1:n(1),1:n(2),1:n(3)))
       !@cuf if ( (mod(istep,isave)).eq. 0 .and. (.not. is_done) .and. (.not.kill) ) istat = cudaMemPrefetchAsync(u, size(u), mydev, 0)
-      !
-      inquire(file='data/fldv.bin', exist=is_data)
-      if(myid.eq.0.and.is_data) call execute_command_line('mv data/fldv.bin   data/fldv_old.bin')
-      call load(action_load,trim(restart_dir)//'fldv.bin',n,      v(1:n(1),1:n(2),1:n(3)))
+      call load(action_load,trim(restart_subdir(it_chkpt))//'fldv.bin',n,v(1:n(1),1:n(2),1:n(3)))
       !@cuf if ( (mod(istep,isave)).eq. 0 .and. (.not. is_done) .and. (.not.kill) ) istat = cudaMemPrefetchAsync(v, size(v), mydev, 0)
-      !
-      inquire(file='data/fldw.bin', exist=is_data)
-      if(myid.eq.0.and.is_data) call execute_command_line('mv data/fldw.bin   data/fldw_old.bin')
-      call load(action_load,trim(restart_dir)//'fldw.bin',n,      w(1:n(1),1:n(2),1:n(3)))   
+      call load(action_load,trim(restart_subdir(it_chkpt))//'fldw.bin',n,w(1:n(1),1:n(2),1:n(3)))   
       !@cuf if ( (mod(istep,isave)).eq. 0 .and. (.not. is_done) .and. (.not.kill) ) istat = cudaMemPrefetchAsync(w, size(w), mydev, 0)
-      !
-      inquire(file='data/flddp.bin', exist=is_data)
-      if(myid.eq.0.and.is_data) call execute_command_line('mv data/fldp.bin   data/fldp_old.bin')
-      call load(action_load,trim(restart_dir)//'fldp.bin',n,      p(1:n(1),1:n(2),1:n(3)))
+      call load(action_load,trim(restart_subdir(it_chkpt))//'fldp.bin',n,p(1:n(1),1:n(2),1:n(3)))
       !@cuf if ( (mod(istep,isave)).eq. 0 .and. (.not. is_done) .and. (.not.kill) ) istat = cudaMemPrefetchAsync(p, size(p), mydev, 0)
       !
       if(time_scheme.ne.'rk3') then ! RK3 is self-restarting
-        inquire(file='data/flddu.bin', exist=is_data)
-        if(myid.eq.0.and.is_data) call execute_command_line('mv data/flddu.bin  data/flddu_old.bin')
-        call load(action_load,trim(restart_dir)//'flddu.bin',n,dudtrko(1:n(1),1:n(2),1:n(3)))
+        call load(action_load,trim(restart_subdir(it_chkpt))//'flddu.bin',n,dudtrko(1:n(1),1:n(2),1:n(3)))
         !@cuf if ( (mod(istep,isave)).eq. 0 .and. (.not. is_done) .and. (.not.kill) ) istat = cudaMemPrefetchAsync(dudtrko, size(dudtrko), mydev, 0)
-        !
-        inquire(file='data/flddv.bin', exist=is_data)
-        if(myid.eq.0.and.is_data) call execute_command_line('mv data/flddv.bin  data/flddv_old.bin')
-        call load(action_load,trim(restart_dir)//'flddv.bin',n,dvdtrko(1:n(1),1:n(2),1:n(3)))
+        call load(action_load,trim(restart_subdir(it_chkpt))//'flddv.bin',n,dvdtrko(1:n(1),1:n(2),1:n(3)))
         !@cuf if ( (mod(istep,isave)).eq. 0 .and. (.not. is_done) .and. (.not.kill) ) istat = cudaMemPrefetchAsync(dvdtrko, size(dvdtrko), mydev, 0)
-        !
-        inquire(file='data/flddw.bin', exist=is_data)
-        if(myid.eq.0.and.is_data) call execute_command_line('mv data/flddw.bin  data/flddw_old.bin')
-        call load(action_load,trim(restart_dir)//'flddw.bin',n,dwdtrko(1:n(1),1:n(2),1:n(3)))
+        call load(action_load,trim(restart_subdir(it_chkpt))//'flddw.bin',n,dwdtrko(1:n(1),1:n(2),1:n(3)))
         !@cuf if ( (mod(istep,isave)).eq. 0 .and. (.not. is_done) .and. (.not.kill) ) istat = cudaMemPrefetchAsync(dwdtrko, size(dwdtrko), mydev, 0)
       endif
-      !
 #if defined(_HEAT_TRANSFER)
-      inquire(file='data/fldtmp.bin', exist=is_data)
-      if(myid.eq.0.and.is_data) call execute_command_line('mv data/fldtmp.bin data/fldtmp_old.bin')
-      call load(action_load,trim(restart_dir)//'fldtmp.bin',n,    tmp(1:n(1),1:n(2),1:n(3)))
+      call load(action_load,trim(restart_subdir(it_chkpt))//'fldtmp.bin',n,tmp(1:n(1),1:n(2),1:n(3)))
       !@cuf if ( (mod(istep,isave)).eq. 0 .and. (.not. is_done) .and. (.not.kill) ) istat = cudaMemPrefetchAsync(tmp, size(tmp), mydev, 0)
       !
       if(time_scheme.ne.'rk3') then ! RK3 is self-restarting
-        inquire(file='data/flddtmp.bin', exist=is_data)
-        if(myid.eq.0.and.is_data) call execute_command_line('mv data/flddtmp.bin data/flddtmp_old.bin')
-        call load(action_load,trim(restart_dir)//'flddtmp.bin',n,dtmpdtrkold(1:n(1),1:n(2),1:n(3)))
+        call load(action_load,trim(restart_subdir(it_chkpt))//'flddtmp.bin',n,dtmpdtrkold(1:n(1),1:n(2),1:n(3)))
         !@cuf if ( (mod(istep,isave)).eq. 0 .and. (.not. is_done) .and. (.not.kill) ) istat = cudaMemPrefetchAsync(dtmpdtrkold, size(dtmpdtrkold), mydev, 0)
       endif
 #endif
+      call load_scalar(action_load,trim(restart_subdir(it_chkpt))//'scalar.out',time,istep,dto)
       !
-      inquire(file='data/scalar.out', exist=is_data)
-      if(myid.eq.0.and.is_data) call execute_command_line('mv data/scalar.out data/scalar_old.out')
-      call load_scalar(action_load,trim(restart_dir)//'scalar.out',time,istep,dto)
-      !
+      var(:) = 0._rp
+      var(1) = 1._rp*istep
+      var(2) = time
+      var(3) = 1._rp*it_chkpt 
+      call out0d(trim(restart_dir)//'restart_checkpoints.out',3,var)
+      ! 
       if(myid.eq.0) print*, '*** Checkpoint saved at time = ', time, 'time step = ', istep, '. ***'
       !
       call profiler_stop("OUT:isave")

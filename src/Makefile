@@ -1,7 +1,7 @@
 # Makefile
 
-ARCH ?= generic
-APP ?= basic
+ARCH ?= generic-gnu
+APP ?= two_phase_inc_isot
 USE_FAST_KERNELS ?= 0
 
 include targets/target.$(ARCH)
@@ -67,11 +67,6 @@ endif
 	DFLAGS += -D_DO_POSTPROC
 endif
 
-ifeq ($(INIT_MONTECARLO),1) 
-	DFLAGS += -D_INIT_MONTECARLO
-	OBJS += monte_sphere.o
-endif
-
 ifeq ($(CONSTANT_COEFFS_POISSON),1) 
 	DFLAGS += -D_CONSTANT_COEFFS_POISSON 
 	OBJS += solver_gpu.o solver_cpu.o
@@ -110,7 +105,7 @@ endif
 TARGET = flutas
 
 all: $(TARGET).$(APP)
-	ln -s $(TARGET).$(APP) $(TARGET)
+	ln -sf $(TARGET).$(APP) $(TARGET)
 
 main.o : apps/$(APP)/$(MAIN_SRC) $(OBJS)
 	$(FC) $(FFLAGS) $(DFLAGS) $(CPP_FLAGS) -I$(POST_PATH) -c -o main.o $<

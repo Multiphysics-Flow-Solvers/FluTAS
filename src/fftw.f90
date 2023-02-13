@@ -3,7 +3,7 @@
 !
 module mod_fftw_param
   use mod_types
-  use iso_c_binding
+  use, intrinsic :: iso_c_binding
 #if defined(_OPENACC)
   use cufft
 #endif

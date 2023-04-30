@@ -364,8 +364,9 @@ program flutas
   !
   if(.not.restart) then
     !
-    istep = 0
-    time  = 0._rp
+    istep    = 0
+    time     = 0._rp
+    it_chkpt = 0 
     !
     if(.not.late_init) then 
       !

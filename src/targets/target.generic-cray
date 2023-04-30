@@ -6,9 +6,9 @@ CPP_FLAGS := -cpp
 CC        := g++
 FC        := ftn  
 ifeq ($(DO_DBG),1)
-  DBG       := #?
+  DBG       := -g -G0
 else
-  OPT       := -O3 #-hfp3
+  OPT       := -O3
 endif
 PRE       := -fallow-argument-mismatch # this option seems required to succesfully compile 2decomp on CRAY machines
 
@@ -22,7 +22,7 @@ LDFLAGS :=
 USE_NVTX = 0
 
 # Required for FFTW
-FFTW_HOME := -I/home/sw-hackathons/opt/spack/linux-ubuntu18.04-broadwell/gcc-9.3.0/fftw-3.3.8-2s34e4b37yi4nlmfix2fccdftl4xd36i/include
+FFTW_HOME := /data/nicolos/numerical_libraries/fftw-3.3.10
 LDFLAGS   += -L${FFTW_HOME}/lib -lfftw3
 
 # Required for NVTX

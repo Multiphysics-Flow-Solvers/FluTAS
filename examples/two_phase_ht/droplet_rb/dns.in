@@ -1,7 +1,7 @@
 1024 1024 512                        ! itot, jtot, ktot
 0.019115d0 0.019115d0 0.009557534d0  ! lx, ly, lz
 0.                                   ! gr
-0.5 1.0e-3                           ! cfl, dt_input
+0.25 1.0e-3                          ! cfl, dt_input
 F                                    ! constant_dt
 ab2 fll                              ! time_scheme, space_scheme_mom
 996.56 5.8331d-4                     ! density, dynamic viscosity

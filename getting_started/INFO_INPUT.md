@@ -7,7 +7,7 @@ Depending on the pre-processor flags considered, different input files are requi
   The above reasoning applies to any other physical dimensionless parameter of the problem under consideration.
 * Line position is essential when constructing the input files. As a reference, use and, if necessary, modify the provided templates available in the [`examples`](./../examples) folder.
 
-The input file ***dns.in*** must be always provide to run a simulation. It contains:
+The input file ***dns.in*** must be always provided. It contains:
 * `itot,jtot,ktot` : grid points in each direction
 * `lx,ly,lz`       : domain dimensions in each direction
 * `gr`             : stretching parameter (SUPPORTED only in single-phase)
@@ -38,7 +38,7 @@ The input file ***dns.in*** must be always provide to run a simulation. It conta
 * ` is_outflow(0,1),is_outflow(1,1),is_outflow(0,2),is_outflow(1,2),is_outflow(0,3),is_outflow(1,3)` : set if the physical boundary is an outflow (`T`) or not (`F`)
  * `dims_in(1),dims_in(2)`: number of CPU cores or GPUs per parallelized direction. Note that **FluTAS** employs a two-dimensional parallelization with pencils aligned along the non-parallelized direction. Three options are available:
    1. Pencils oriented along the **x** direction. The pre-processor flag `_DECOMP_X` controls this option. In this case, a number of `dims_in(1)` and `dims_in(2)` processors are distributed along the **y** and the **z** directions, respectively. This option should be typically preferred both for CPUs and GPUs runs since it minimizes the number of `all-to-all` operations in the Poisson solver. For GPUs runs, the option `_DECOMP_X` allows to employ a slab-decomposition only;
-   2. Pencils oriented along the **y** direction. The pre-processor flag `_DECOMP_Y` controls this option. In this case, a number of `dims_in(1)` and `dims_in(2)` processors are distributed along the **x** and the **z** directions, respectively. For GPUs runs, the option `_DECOMP_X` allows to employ a slab-decomposition only;
+   2. Pencils oriented along the **y** direction. The pre-processor flag `_DECOMP_Y` controls this option. In this case, a number of `dims_in(1)` and `dims_in(2)` processors are distributed along the **x** and the **z** directions, respectively. For GPUs runs, the option `_DECOMP_Y` allows to employ a slab-decomposition only;
    3. Pencils oriented along the **z** direction. The pre-processor flag `_DECOMP_Z` controls this option. In this case, a number of `dims_in(1)` and `dims_in(2)` processors are distributed along the **x** and the **y** directions, respectively. For GPUs runs, the option `_DECOMP_Z` allows both a slab and a pencil decomposition.
 * `nthreadsmax`: maximum number of threads for OpenMP (UNTESTED)       
 

@@ -8,7 +8,7 @@ FC        := mpif90
 ifeq ($(DO_DBG),1)
   DBG       := -O0 -g -fbacktrace -ffpe-trap=invalid -Wall -Wextra -pedantic -fcheck=all -finit-real=snan
 else
-  OPT       := -O3 -ffast-math -march=native
+  OPT       := -O3 -march=native #-ffast-math # "-ffast-math" leads to code failure in some GNU versions. If it happens, simply use "OPT := -O3 -march=native" or "OPT := -O3"
 endif
 PRE       := #-fdefault-real-8 -fdefault-double-8
 
@@ -22,7 +22,7 @@ LDFLAGS :=
 USE_NVTX = 0
 
 # Required for FFTW
-FFTW_HOME := /data/nicolos/libraries/fftw-3.3.9
+FFTW_HOME := /data/nicolos/numerical_libraries/fftw-3.3.10
 LDFLAGS   += -L${FFTW_HOME}/lib -lfftw3
 
 # Required for NVTX

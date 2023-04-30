@@ -8,5 +8,7 @@ FluTAS originated from a collective effort by researchers who worked in the grou
 * Massimiliano Fatica (NVIDIA)
 * Everett Phillips (NVIDIA)
 * Marco Edoardo Rosti (Okinawa Institute of Science and Technology)
+* Salar Zamani Salimi (NTNU)
 * Nicolo Scapin (KTH)
+* Armin Shahmardi (KTH)
 * Filippo Spiga (NVIDIA)

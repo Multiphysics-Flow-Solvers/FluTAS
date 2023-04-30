@@ -4,9 +4,9 @@
 ### CPU version
 For the use in ***CPU***, **FluTAS** requires the library FFTW to perform Fast Fourier transforms. FFTW should be downloaded, compiled separately and linked in the chosen `src/targets/*` file. To do so, we list here a series of steps:
 
-1. Even before downloading/cloning **FluTAS**, create a separate directory in a location of your choice where to place the library. Any choice is fine, but we strongly recommend creating an independent directory outside any numerical code you have. On the command line, one can type `mkdir numerical_libraries` to create it, `cd numerical_libraries` to go inside it. Hereinafter and unless otherwise stated, this path is termed `<YOUR_PATH>/numerical_libraries/fftw-3.3.10/`. Type on the command line `pwd` to know your actual path, i.e. what to put instead of `<YOUR_PATH>`. This information will be necessary for steps 4 and 5;
+1. Even before downloading/cloning **FluTAS**, create a separate directory in a location of your choice where to place the library. Any choice is fine, but we strongly recommend creating an independent directory outside any numerical code you have. On the command line, one can type `mkdir numerical_libraries` to create it, `cd numerical_libraries` to go inside it. Hereinafter and unless otherwise stated, this path is termed `<YOUR_PATH>/numerical_libraries/`. Type on the command line `pwd` to know your actual path, i.e. what to put instead of `<YOUR_PATH>`. This information will be necessary for steps 4 and 5;
 
-2. Go to the page [download FFTW](http://www.fftw.org/download.html) and check which is the latest release of the library. While we are writing this note (Febraury 2023), the latest release is `FFTW 3.3.10` and, therefore, we specify the procedure for this version. In case of subsequent releases, the procedure can be easily adjusted;
+2. Go to the page [download FFTW](http://www.fftw.org/download.html) and check which is the latest release of the library. While we are writing this note (May 2023), the latest release is `FFTW 3.3.10` and, therefore, we specify the procedure for this version. In case of subsequent releases, the procedure can be easily adjusted;
  
 3. Go inside the new directory, i.e., `cd numerical_libraries`, and on the terminal type the following commands (or create a bash script to be run on the terminal)
 
